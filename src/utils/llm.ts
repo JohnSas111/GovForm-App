@@ -30,7 +30,7 @@ export const defineWordWithLLM = async (word: string, sentence?: string, languag
   "bisaya": { "definition": "...", "synonyms": ["..."], "example_sentence": "..." }
 }
 You must ALWAYS provide all 3 language translations (English, Tagalog, and Bisaya) accurately.
-CRITICAL: The 'example_sentence' for Tagalog and Bisaya MUST be a natural, conversational, and everyday-spoken translation that perfectly matches the meaning of the original English context_sentence. Avoid overly formal or deep words—write it exactly how a native speaker would casually say it in real life.`;
+CRITICAL: The 'example_sentence' for Tagalog and Bisaya MUST be a natural, conversational, add slight slang if applicable, and everyday-spoken translation that perfectly matches the meaning of the original English context_sentence. Avoid overly formal or deep words—write it exactly how a native speaker would casually say it in real life.`;
 
   try {
     if (!GEMINI_API_KEY) {
@@ -59,9 +59,9 @@ CRITICAL: The 'example_sentence' for Tagalog and Bisaya MUST be a natural, conve
     }
 
     const data = await response.json();
-    
+
     if (data.error) {
-       throw new Error(data.error.message);
+      throw new Error(data.error.message);
     }
 
     const jsonOutput = data.candidates[0].content.parts[0].text;

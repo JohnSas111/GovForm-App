@@ -139,21 +139,49 @@ export default function CameraOCRScreen() {
       // Skip Python Server! Process locally with Google ML Kit.
       const result = await TextRecognition.recognize(manipResult.uri);
 
-      // Map ML Kit block format to our BoundingBoxItem format
-      const data: BoundingBoxItem[] = result.blocks.map((block: any) => {
-        // Create a rudimentary context sentence by concatenating all lines in the block
-        const sentence = block.lines
+      const data: BoundingBoxItem[] = [];
+      result.blocks.forEach((block: any) => {
+        // Create context sentence by concatenating all lines in the block
+        const blockSentence = block.lines
           ? block.lines.map((l: any) => l.text).join(' ')
           : block.text;
 
-        return {
-          text: block.text,
-          sentence: sentence,
-          x: block.frame?.left || 0,
-          y: block.frame?.top || 0,
-          width: block.frame?.width || 0,
-          height: block.frame?.height || 0,
-        };
+        if (block.lines) {
+          block.lines.forEach((line: any) => {
+            if (line.elements) {
+              line.elements.forEach((element: any) => {
+                data.push({
+                  text: element.text,
+                  sentence: blockSentence, // Keep block context for the dictionary LLM
+                  x: element.frame?.left || 0,
+                  y: element.frame?.top || 0,
+                  width: element.frame?.width || 0,
+                  height: element.frame?.height || 0,
+                });
+              });
+            } else {
+              // Fallback to line level if elements are missing
+              data.push({
+                text: line.text,
+                sentence: blockSentence,
+                x: line.frame?.left || 0,
+                y: line.frame?.top || 0,
+                width: line.frame?.width || 0,
+                height: line.frame?.height || 0,
+              });
+            }
+          });
+        } else {
+          // Fallback to block level if lines are missing
+          data.push({
+            text: block.text,
+            sentence: blockSentence,
+            x: block.frame?.left || 0,
+            y: block.frame?.top || 0,
+            width: block.frame?.width || 0,
+            height: block.frame?.height || 0,
+          });
+        }
       });
 
       setBoundingBoxes(data);
