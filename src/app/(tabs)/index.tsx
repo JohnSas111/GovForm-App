@@ -10,6 +10,7 @@ import AiDictionaryModal from '@/components/ai-dictionary-modal';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { useEffect, useState } from 'react';
 import { saveRecentForm } from '@/utils/storage';
+import { getOcrSettings } from '@/utils/ocr-settings';
 import {
   Image,
   LayoutChangeEvent,
@@ -122,55 +123,80 @@ export default function HomeScreen() {
     setSelectedWord(null);
 
     try {
-      // Process locally with Google ML Kit
-      const result = await TextRecognition.recognize(uri);
+      const ocrSettings = await getOcrSettings();
+      let data: BoundingBoxItem[] = [];
 
-      const data: BoundingBoxItem[] = [];
-      result.blocks.forEach((block: any) => {
-        // Create context sentence by concatenating all lines in the block
-        const blockSentence = block.lines
-          ? block.lines.map((l: any) => l.text).join(' ')
-          : block.text;
+      if (ocrSettings.mode === 'desktop') {
+        const url = `http://${ocrSettings.desktopIp}:8000/predict`;
+        const response = await FileSystem.uploadAsync(url, uri, {
+          fieldName: 'file',
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        });
 
-        if (block.lines) {
-          block.lines.forEach((line: any) => {
-            if (line.elements) {
-              line.elements.forEach((element: any) => {
-                data.push({
-                  text: element.text,
-                  sentence: blockSentence, // Keep block context for the dictionary LLM
-                  x: element.frame?.left || 0,
-                  y: element.frame?.top || 0,
-                  width: element.frame?.width || 0,
-                  height: element.frame?.height || 0,
-                });
-              });
-            } else {
-              // Fallback to line level
-              data.push({
-                text: line.text,
-                sentence: blockSentence,
-                x: line.frame?.left || 0,
-                y: line.frame?.top || 0,
-                width: line.frame?.width || 0,
-                height: line.frame?.height || 0,
-              });
-            }
-          });
+        if (response.status === 200) {
+          const result = JSON.parse(response.body);
+          data = result.boxes.map((box: any) => ({
+            text: box.text,
+            sentence: box.text, // Fallback to text since Python Tesseract doesn't currently group sentences
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+          }));
         } else {
-          // Fallback to block level
-          data.push({
-            text: block.text,
-            sentence: blockSentence,
-            x: block.frame?.left || 0,
-            y: block.frame?.top || 0,
-            width: block.frame?.width || 0,
-            height: block.frame?.height || 0,
-          });
+          throw new Error('Desktop OCR failed with status ' + response.status);
         }
-      });
+      } else {
+        // Process locally with Google ML Kit
+        const result = await TextRecognition.recognize(uri);
 
-      console.log(`✅ Received ${data.length} bounding boxes from ML Kit!`);
+        result.blocks.forEach((block: any) => {
+          // Create context sentence by concatenating all lines in the block
+          const blockSentence = block.lines
+            ? block.lines.map((l: any) => l.text).join(' ')
+            : block.text;
+
+          if (block.lines) {
+            block.lines.forEach((line: any) => {
+              if (line.elements) {
+                line.elements.forEach((element: any) => {
+                  data.push({
+                    text: element.text,
+                    sentence: blockSentence, // Keep block context for the dictionary LLM
+                    x: element.frame?.left || 0,
+                    y: element.frame?.top || 0,
+                    width: element.frame?.width || 0,
+                    height: element.frame?.height || 0,
+                  });
+                });
+              } else {
+                // Fallback to line level
+                data.push({
+                  text: line.text,
+                  sentence: blockSentence,
+                  x: line.frame?.left || 0,
+                  y: line.frame?.top || 0,
+                  width: line.frame?.width || 0,
+                  height: line.frame?.height || 0,
+                });
+              }
+            });
+          } else {
+            // Fallback to block level
+            data.push({
+              text: block.text,
+              sentence: blockSentence,
+              x: block.frame?.left || 0,
+              y: block.frame?.top || 0,
+              width: block.frame?.width || 0,
+              height: block.frame?.height || 0,
+            });
+          }
+        });
+      }
+
+      console.log(`✅ Received ${data.length} bounding boxes from OCR!`);
       setBoundingBoxes(data);
       
       // Save to recents in the background
