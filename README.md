@@ -305,25 +305,54 @@ To test it on your device:
 ## Update: August 21, 2026 (6:00 PM)
 
 ### 1. Gemini API Integration
+
 - We explored using Google's Gemini API as an alternative to the locally-hosted Ollama model to generate better, more accurate dictionary definitions.
 - We tested `gemini-3.6-flash` and migrated the main LLM fetching logic in `src/utils/llm.ts` to use this API.
 - Secured the API Key using an `EXPO_PUBLIC_GEMINI_API_KEY` environment variable in a local `.env` file (which is ignored by Git).
 - Enabled `responseMimeType: "application/json"` in the Gemini generation config to guarantee valid JSON formatting and completely eliminate UI parsing crashes.
 
 ### 2. Conversational Prompt Engineering
+
 - Updated the AI system prompt in `src/utils/llm.ts` to explicitly instruct the model that translated example sentences (Tagalog and Bisaya) MUST be natural, conversational, and everyday-spoken instead of overly formal.
 - Updated the UI in `src/components/ai-dictionary-modal.tsx` to say "Asking Gemini Flash 3.6..." instead of Llama.
 
 ## Update: August 22, 2026
 
 ### 1. Bypassing EAS Build Limits & Secrets
+
 - Reached the monthly free-tier limit for `eas build` on the primary Expo account.
 - Discovered that EAS Cloud builds ignore local `.env` files (because of `.gitignore`), which caused the Gemini API key to be missing in cloud-built APKs.
 - **Solution:** We switched to building the Release APK entirely locally using `npx expo run:android --variant release`. This bypassed the cloud queues, circumvented the build limits, and successfully bundled the local `.env` variables natively.
 
 ### 2. Resolving Gradle Build Crashes & Bug Fixes
+
 - Encountered the infamous `DexArchiveMergerException` (exceeding 65k methods or corrupted cache) after adding ML Kit.
 - **Fix:** Performed a clean slate wipe of the Android Gradle cache using `cd android && .\gradlew clean` to resolve the duplicate dex archives.
 - Fixed a minor import typo (`ImageManipulator`) in `camera.tsx` that was causing the JS bundle to fail during the release build.
 - **Bug Fix:** Discovered that the ML Kit migration accidentally deleted the code that saves live camera captures to the "Recent Scans" storage. Re-imported and invoked `saveRecentForm` inside `camera.tsx` to fix this.
 - **Important Note:** Always remember to clear the Metro Bundler cache (`npx expo start -c`) whenever you add or change variables in the `.env` file!
+
+## Update: September 4, 2026
+
+### 1. Document Scanner Integration
+
+- Completely replaced the standard `expo-camera` implementation in `src/app/camera.tsx` with `react-native-document-scanner-plugin`.
+- **Better OCR:** The native scanner automatically crops document boundaries, applies perspective correction (unwarping), and optimizes contrast before sending the image to Google ML Kit, drastically improving text recognition accuracy.
+- **UX Improvement:** The document scanner launches automatically as soon as the user navigates to the camera tab, providing a familiar, high-quality scanning experience.
+
+### 2. Text-to-Speech (TTS) for AI Dictionary
+
+- Introduced a new `src/utils/tts.ts` utility utilizing `expo-speech` to read AI definitions aloud.
+- Dynamically maps languages to the correct on-device speech locales (using `en-US` for English and falling back to `fil-PH` for Tagalog and Cebuano to ensure natural pronunciation).
+- Added a "Speak" button directly inside the `<AiDictionaryModal />` so users can hear how words and definitions are pronounced.
+
+### 3. Environment Variables & Troubleshooting
+
+- Created a safe `.env` and `.env.example` file to securely store the `EXPO_PUBLIC_GEMINI_API_KEY`.
+- Fixed a persistent `Address already in use: bind` Gradle daemon error during Windows builds by running the release compilation with the `--no-daemon` flag (`npx expo run:android --variant release -- --no-daemon`).
+- Fixed a minor TypeScript issue regarding `StyleSheet.absoluteFillObject` in the camera overlay.
+
+### 4. Git Collaboration & Dependency Sync
+
+- Executed a successful `git pull` from the main repository branch to sync recent codebase changes (which included the initial Text-to-Speech logic and UI enhancements).
+- Ran a clean `npm install` post-pull to fetch missing external dependencies like `expo-speech` introduced by the remote branch.
