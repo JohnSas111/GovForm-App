@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
-
+import { LLMResponse } from '@/utils/llm';
 export interface BoundingBoxItem {
   id?: string;
   text: string;
@@ -106,5 +106,30 @@ export const deleteRecentForm = async (id: string, thumbnailUri: string) => {
   } catch (error) {
     console.error('Error deleting recent form:', error);
     throw error;
+  }
+};
+
+const DICT_CACHE_KEY = '@govform_dict_cache';
+
+export const saveWordDefinition = async (word: string, response: LLMResponse) => {
+  try {
+    const existingStr = await AsyncStorage.getItem(DICT_CACHE_KEY);
+    const cache = existingStr ? JSON.parse(existingStr) : {};
+    cache[word.toLowerCase()] = response;
+    await AsyncStorage.setItem(DICT_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    console.error('Error saving word to dict cache:', error);
+  }
+};
+
+export const getCachedWordDefinition = async (word: string): Promise<LLMResponse | null> => {
+  try {
+    const existingStr = await AsyncStorage.getItem(DICT_CACHE_KEY);
+    if (!existingStr) return null;
+    const cache = JSON.parse(existingStr);
+    return cache[word.toLowerCase()] || null;
+  } catch (error) {
+    console.error('Error getting word from dict cache:', error);
+    return null;
   }
 };

@@ -1,7 +1,9 @@
 import { useLocalization } from "@/context/LocalizationContext";
 import { defineWordWithLLM, LLMResponse } from "@/utils/llm";
 import { speakText, stopSpeaking } from "@/utils/tts";
+import { getCachedWordDefinition, saveWordDefinition } from '@/utils/storage';
 import { Ionicons } from "@expo/vector-icons";
+import * as Network from "expo-network";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -44,11 +46,28 @@ export default function AiDictionaryModal({
       setIsLlmLoading(true);
 
       try {
+        // 1. Check offline cache first
+        const cached = await getCachedWordDefinition(wordText);
+        if (cached) {
+          setLlmResult(cached);
+          setIsLlmLoading(false);
+          return;
+        }
+
+        // 2. If not cached, check network before calling API
+        const networkState = await Network.getNetworkStateAsync();
+        if (!networkState.isConnected && networkState.isInternetReachable !== true) {
+          throw new Error("You are currently offline. This word hasn't been saved yet. Connect to the internet to look it up!");
+        }
+
         const result = await defineWordWithLLM(
           wordText,
           wordSentence,
           language,
         );
+        
+        // 3. Save to cache for future offline use
+        await saveWordDefinition(wordText, result);
         setLlmResult(result);
       } catch (err: any) {
         setLlmError(

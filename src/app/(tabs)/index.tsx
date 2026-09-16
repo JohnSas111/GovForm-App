@@ -11,6 +11,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { useEffect, useState } from 'react';
 import { saveRecentForm } from '@/utils/storage';
 import { getOcrSettings } from '@/utils/ocr-settings';
+import ExpoBlurDetector from '../../../modules/expo-blur-detector/src/ExpoBlurDetectorModule';
 import {
   Image,
   LayoutChangeEvent,
@@ -123,6 +124,15 @@ export default function HomeScreen() {
     setSelectedWord(null);
 
     try {
+      const blurScore = await ExpoBlurDetector.getBlurScore(uri);
+      
+      if (blurScore < 1000.0) {
+        Alert.alert("Image Blurry", "The image is too blurry. Please upload a clearer photo.");
+        setImage(null);
+        setIsLoading(false);
+        return;
+      }
+
       const ocrSettings = await getOcrSettings();
       let data: BoundingBoxItem[] = [];
 

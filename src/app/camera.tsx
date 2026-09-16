@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import ExpoBlurDetector from '../../modules/expo-blur-detector/src/ExpoBlurDetectorModule';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -112,13 +113,21 @@ export default function CameraOCRScreen() {
       if (scannedImages && scannedImages.length > 0) {
         await processImage(scannedImages[0]);
       } else {
-        // User cancelled scanning, return to previous screen
-        router.back();
+        // User cancelled scanning, return to previous screen safely
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/');
+        }
       }
     } catch (error) {
       console.error('Scanner error:', error);
       Alert.alert('Scanner Error', 'Failed to open document scanner.');
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/');
+      }
     } finally {
       setIsScannerOpen(false);
     }
@@ -141,6 +150,17 @@ export default function CameraOCRScreen() {
         width: manipResult.width,
         height: manipResult.height,
       });
+
+      setLoadingMessage('Checking image quality...');
+      
+      const blurScore = await ExpoBlurDetector.getBlurScore(manipResult.uri);
+      
+      if (blurScore < 1000.0) {
+        Alert.alert("Image Blurry", "The image is too blurry. Please hold steady and try again.");
+        setCapturedImage(null);
+        setIsProcessing(false);
+        return;
+      }
 
       setLoadingMessage('Uploading image...');
 
@@ -330,7 +350,16 @@ export default function CameraOCRScreen() {
 
           {/* Header Controls overlay */}
           <SafeAreaView style={styles.overlayHeader}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/');
+                }
+              }}
+            >
               <Ionicons name="arrow-back" size={26} color="white" />
             </TouchableOpacity>
 

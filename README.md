@@ -356,3 +356,19 @@ To test it on your device:
 
 - Executed a successful `git pull` from the main repository branch to sync recent codebase changes (which included the initial Text-to-Speech logic and UI enhancements).
 - Ran a clean `npm install` post-pull to fetch missing external dependencies like `expo-speech` introduced by the remote branch.
+
+## Update: September 16, 2026
+
+### 1. Offline Mode & Dictionary Caching
+
+- **Network Check**: Integrated `expo-network` to detect internet availability on app startup (`src/app/index.tsx`) and redirect to a new offline fallback screen (`src/app/offline.tsx`) if disconnected.
+- **Local Storage Cache**: Updated `src/utils/storage.ts` to cache LLM dictionary definitions (`saveWordDefinition`) locally when online. 
+- **Offline Dictionary Retrieval**: Modified `<AiDictionaryModal />` to prioritize reading from the local cache (`getCachedWordDefinition`) when offline, allowing users to still read definitions of previously tapped words without an internet connection.
+- **Offline Forms History**: Refactored the forms list into a reusable `<RecentScansList />` component and added it to the offline screen so users can browse their previously scanned documents even without a connection.
+
+### 2. Native On-Device Blur Detection (Laplacian Variance)
+
+- **Local Native Module**: Created a custom, lightweight Expo module (`modules/expo-blur-detector`) to run native Android Kotlin code instead of heavy libraries like OpenCV.
+- **Mathematical Validation**: Re-implemented the mathematical Laplacian variance algorithm natively to calculate the sharpness (blur score) of an image instantly.
+- **Pre-OCR Gatekeeper**: Integrated the blur detector into both the live Camera (`camera.tsx`) and Gallery Uploads (`index.tsx`). It intercepts images and rejects them *before* they are sent to Google ML Kit or the Python server if the blur score is below the calculated threshold (`1000.0`), saving processing power and improving OCR accuracy.
+- **Navigation Safety**: Fixed an Expo Router development warning by wrapping `router.back()` calls with safe `router.canGoBack()` checks across the app.
