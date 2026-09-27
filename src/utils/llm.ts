@@ -14,9 +14,13 @@ export interface LLMResponse {
 }
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-export const defineWordWithLLM = async (word: string, sentence?: string, language: string = 'English'): Promise<LLMResponse> => {
+const GEMINI_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
+export const defineWordWithLLM = async (
+  word: string,
+  sentence?: string,
+  language: string = "English",
+): Promise<LLMResponse> => {
   const prompt = sentence
     ? `Define the word "${word}" in the context of this sentence: "${sentence}". Please generate the output in ${language}.`
     : `Define the word "${word}". Please generate the output in ${language}.`;
@@ -38,24 +42,27 @@ CRITICAL: The 'example_sentence' for Tagalog and Bisaya MUST be a natural, conve
     }
 
     const response = await fetch(GEMINI_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
+        "X-goog-api-key": GEMINI_API_KEY,
       },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 0.2
-        }
+          temperature: 0.2,
+        },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API Error Body:", errorText);
-      throw new Error(`Gemini API returned status ${response.status}. Details: ${errorText}`);
+      throw new Error(
+        `Gemini API returned status ${response.status}. Details: ${errorText}`,
+      );
     }
 
     const data = await response.json();
@@ -64,18 +71,22 @@ CRITICAL: The 'example_sentence' for Tagalog and Bisaya MUST be a natural, conve
       throw new Error(data.error.message);
     }
 
-    const jsonOutput = data.candidates[0].content.parts[0].text;
+    const jsonOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!jsonOutput) {
+      console.error("Unexpected Gemini response:", data);
+      throw new Error("Gemini returned an empty or invalid response.");
+    }
 
     try {
       const parsedData: LLMResponse = JSON.parse(jsonOutput);
       return parsedData;
     } catch (parseError) {
-      console.error('Failed to parse JSON from Gemini:', jsonOutput);
-      throw new Error('Gemini did not return valid JSON format.');
+      console.error("Failed to parse JSON from Gemini:", jsonOutput);
+      throw new Error("Gemini did not return valid JSON format.");
     }
-
   } catch (error) {
-    console.error('Error connecting to Gemini API:', error);
+    console.error("Error connecting to Gemini API:", error);
     throw error;
   }
 };

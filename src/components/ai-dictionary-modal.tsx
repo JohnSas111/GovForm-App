@@ -1,7 +1,7 @@
 import { useLocalization } from "@/context/LocalizationContext";
 import { defineWordWithLLM, LLMResponse } from "@/utils/llm";
+import { getCachedWordDefinition, saveWordDefinition } from "@/utils/storage";
 import { speakText, stopSpeaking } from "@/utils/tts";
-import { getCachedWordDefinition, saveWordDefinition } from '@/utils/storage';
 import { Ionicons } from "@expo/vector-icons";
 import * as Network from "expo-network";
 import { useEffect, useState } from "react";
@@ -56,8 +56,13 @@ export default function AiDictionaryModal({
 
         // 2. If not cached, check network before calling API
         const networkState = await Network.getNetworkStateAsync();
-        if (!networkState.isConnected && networkState.isInternetReachable !== true) {
-          throw new Error("You are currently offline. This word hasn't been saved yet. Connect to the internet to look it up!");
+        if (
+          !networkState.isConnected &&
+          networkState.isInternetReachable !== true
+        ) {
+          throw new Error(
+            "You are currently offline. This word hasn't been saved yet. Connect to the internet to look it up!",
+          );
         }
 
         const result = await defineWordWithLLM(
@@ -65,7 +70,7 @@ export default function AiDictionaryModal({
           wordSentence,
           language,
         );
-        
+
         // 3. Save to cache for future offline use
         await saveWordDefinition(wordText, result);
         setLlmResult(result);
@@ -116,19 +121,17 @@ export default function AiDictionaryModal({
             : undefined;
 
     if (langData?.definition) {
-      const sentence = langData.example_sentence || llmResult.context_sentence;
-      return [wordText, langData.definition, sentence]
-        .filter(Boolean)
-        .join(". ");
+      const sentence = langData.example_sentence;
+
+      return [langData.definition, sentence].filter(Boolean).join(". ");
     }
 
-    // Fallback for unexpected response shapes: read whatever definition
-    // text is available.
     const fallbackEntry = Object.values(llmResult).find(
       (value): value is { definition: string } =>
         typeof value === "object" && value !== null && "definition" in value,
     );
-    return [wordText, fallbackEntry?.definition].filter(Boolean).join(". ");
+
+    return [fallbackEntry?.definition].filter(Boolean).join(". ");
   };
 
   const handleSpeakToggle = () => {

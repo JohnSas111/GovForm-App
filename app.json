@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "GovForm AI (Live)",
+    "owner": "johnsas",
     "slug": "Capstone_AI_APP",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -64,9 +65,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "bb3101f0-12d2-4519-8f4a-3a29f6eab669"
+        "projectId": "cbd91342-2ab1-4fee-b12b-453deff81979"
       }
-    },
-    "owner": "kristopher115"
+    }
   }
 }
