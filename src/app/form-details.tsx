@@ -1,20 +1,18 @@
-import AiDictionaryModal from '@/components/ai-dictionary-modal';
-import { getRecentFormById, RecentForm, HarvestedWord } from '@/utils/storage';
-import { useLocalization } from '@/context/LocalizationContext';
-import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import { useLocalization } from "@/context/LocalizationContext";
+import { getRecentFormById, HarvestedWord, RecentForm } from "@/utils/storage";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FormDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,7 +22,15 @@ export default function FormDetailsScreen() {
 
   // LLM State for modal
   const [selectedWordText, setSelectedWordText] = useState<string | null>(null);
-  const [selectedWordSentence, setSelectedWordSentence] = useState<string | undefined>(undefined);
+  const [selectedWordSentence, setSelectedWordSentence] = useState<
+    string | undefined
+  >(undefined);
+  const [selectedWordLine, setSelectedWordLine] = useState<string | undefined>(
+    undefined,
+  );
+  const [selectedWordOccurrence, setSelectedWordOccurrence] = useState<
+    number | undefined
+  >(undefined);
 
   useEffect(() => {
     const loadForm = async () => {
@@ -38,16 +44,25 @@ export default function FormDetailsScreen() {
   }, [id]);
 
   const handleWordTap = (wordData: HarvestedWord | string) => {
-    const wordText = typeof wordData === 'string' ? wordData : wordData.text;
-    const wordSentence = typeof wordData === 'string' ? undefined : wordData.sentence;
+    const wordText = typeof wordData === "string" ? wordData : wordData.text;
+    const wordSentence =
+      typeof wordData === "string" ? undefined : wordData.sentence;
+    // Older saved scans have no line info; the modal then falls back to the sentence.
+    const wordLine = typeof wordData === "string" ? undefined : wordData.line;
+    const wordOccurrence =
+      typeof wordData === "string" ? undefined : wordData.occurrence;
 
     setSelectedWordText(wordText);
     setSelectedWordSentence(wordSentence);
+    setSelectedWordLine(wordLine);
+    setSelectedWordOccurrence(wordOccurrence);
   };
 
   const closeModal = () => {
     setSelectedWordText(null);
     setSelectedWordSentence(undefined);
+    setSelectedWordLine(undefined);
+    setSelectedWordOccurrence(undefined);
   };
 
   if (isLoading) {
@@ -62,7 +77,10 @@ export default function FormDetailsScreen() {
     return (
       <SafeAreaView style={styles.centerContainer}>
         <Text style={styles.errorText}>Form not found.</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -72,7 +90,10 @@ export default function FormDetailsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.iconButton}
+        >
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{form.title}</Text>
@@ -84,20 +105,24 @@ export default function FormDetailsScreen() {
         <Text style={styles.dateText}>{form.dateStr}</Text>
       </View>
       <Text style={styles.summaryText}>
-        {form.words.length} words harvested. Tap any word to define it using GovForm AI.
+        {form.words.length} words harvested. Tap any word to define it using
+        GovForm AI.
       </Text>
 
       <FlatList
         data={form.words}
         keyExtractor={(item, index) => {
-          const text = typeof item === 'string' ? item : item.text;
+          const text = typeof item === "string" ? item : item.text;
           return `${index}-${text}`;
         }}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => {
-          const wordText = typeof item === 'string' ? item : item.text;
+          const wordText = typeof item === "string" ? item : item.text;
           return (
-            <TouchableOpacity style={styles.wordCard} onPress={() => handleWordTap(item)}>
+            <TouchableOpacity
+              style={styles.wordCard}
+              onPress={() => handleWordTap(item)}
+            >
               <Text style={styles.wordText}>{wordText}</Text>
               <Ionicons name="sparkles" size={16} color="#2182DE" />
             </TouchableOpacity>
@@ -110,6 +135,8 @@ export default function FormDetailsScreen() {
         visible={selectedWordText !== null}
         wordText={selectedWordText}
         wordSentence={selectedWordSentence}
+        wordLine={selectedWordLine}
+        wordOccurrence={selectedWordOccurrence}
         onClose={closeModal}
       />
     </SafeAreaView>
@@ -117,22 +144,75 @@ export default function FormDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9F9F9' },
-  centerContainer: { flex: 1, backgroundColor: '#F9F9F9', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  errorText: { fontSize: 18, color: '#333', marginBottom: 20 },
-  backButton: { backgroundColor: '#2182DE', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  backButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  iconButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 22, backgroundColor: '#EAEAEA' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#000', flex: 1, textAlign: 'center' },
-  infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 },
-  dateText: { fontSize: 14, color: '#666' },
-  summaryText: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 16, paddingHorizontal: 24 },
+  container: { flex: 1, backgroundColor: "#F9F9F9" },
+  centerContainer: {
+    flex: 1,
+    backgroundColor: "#F9F9F9",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorText: { fontSize: 18, color: "#333", marginBottom: 20 },
+  backButton: {
+    backgroundColor: "#2182DE",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  backButtonText: { color: "white", fontSize: 16, fontWeight: "bold" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 22,
+    backgroundColor: "#EAEAEA",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#000",
+    flex: 1,
+    textAlign: "center",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  dateText: { fontSize: 14, color: "#666" },
+  summaryText: {
+    fontSize: 14,
+    color: "#888",
+    textAlign: "center",
+    marginBottom: 16,
+    paddingHorizontal: 24,
+  },
   listContent: { paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
   wordCard: {
-    backgroundColor: 'white', padding: 16, borderRadius: 12,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: '#F0F0F0'
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
   },
-  wordText: { fontSize: 16, color: '#333', lineHeight: 22, flex: 1 },
+  wordText: { fontSize: 16, color: "#333", lineHeight: 22, flex: 1 },
 });

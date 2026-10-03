@@ -1,20 +1,24 @@
 import { router } from "expo-router";
-import * as SecureStore from 'expo-secure-store';
-import * as Network from 'expo-network';
-import { useEffect } from "react";
+import * as SecureStore from "expo-secure-store";
+import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function WelcomeScreen() {
-  const checkLanguageAndNavigate = async () => {
-    try {
-      const networkState = await Network.getNetworkStateAsync();
-      if (!networkState.isConnected && networkState.isInternetReachable !== true) {
-        router.replace("/offline" as any);
-        return;
-      }
+  // Make sure we leave this screen only once (the timer AND a tap can both fire).
+  const hasNavigatedRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-      const lang = await SecureStore.getItemAsync('selectedLanguage');
+  // No internet check here: scanning (on-device OCR) and saved words work offline.
+  // Only a NEW dictionary lookup needs internet, and the dictionary screen
+  // handles that itself with a clear message.
+  const checkLanguageAndNavigate = async () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    try {
+      const lang = await SecureStore.getItemAsync("selectedLanguage");
       if (lang) {
         router.replace("/(tabs)" as any);
       } else {
@@ -27,10 +31,12 @@ export default function WelcomeScreen() {
 
   // Auto-navigate to appropriate screen after 2.5 seconds
   useEffect(() => {
-    const timer = setTimeout(() => {
+    timerRef.current = setTimeout(() => {
       checkLanguageAndNavigate();
     }, 2500);
-    return () => clearTimeout(timer);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   return (

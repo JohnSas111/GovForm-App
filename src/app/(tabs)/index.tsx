@@ -1,18 +1,17 @@
-import { useLocalization } from '@/context/LocalizationContext';
-import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as ImagePicker from 'expo-image-picker';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, useNavigation } from 'expo-router';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
-import AiDictionaryModal from '@/components/ai-dictionary-modal';
-import TextRecognition from '@react-native-ml-kit/text-recognition';
-import { useEffect, useState } from 'react';
-import { saveRecentForm } from '@/utils/storage';
-import { getOcrSettings } from '@/utils/ocr-settings';
-import ExpoBlurDetector from '../../../modules/expo-blur-detector/src/ExpoBlurDetectorModule';
+import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import { useLocalization } from "@/context/LocalizationContext";
+import { getOcrSettings } from "@/utils/ocr-settings";
+import { createOccurrenceCounter } from "@/utils/phrase-match";
+import { saveRecentForm } from "@/utils/storage";
+import { Ionicons } from "@expo/vector-icons";
+import TextRecognition from "@react-native-ml-kit/text-recognition";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useNavigation } from "expo-router";
+import { useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   LayoutChangeEvent,
   ScrollView,
@@ -20,14 +19,21 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ExpoBlurDetector from "../../../modules/expo-blur-detector/src/ExpoBlurDetectorModule";
 
 export interface BoundingBoxItem {
   id?: string;
   text: string;
-  sentence?: string;
+  sentence?: string; // the whole text block around the word
+  line?: string; // the single line of text the word is on
+  occurrence?: number; // 0 = first time this word appears on its line, 1 = second, ...
   x: number;
   y: number;
   width: number;
@@ -36,34 +42,148 @@ export interface BoundingBoxItem {
 
 // Sample fallback bounding boxes simulating Tesseract --psm 11 sparse text detection
 const DEMO_BOUNDING_BOXES: BoundingBoxItem[] = [
-  { text: 'SUPPLEMENTARY/UPDATING', sentence: 'SUPPLEMENTARY/UPDATING OF DATA', x: 230, y: 135, width: 140, height: 12 },
-  { text: 'PERSONAL', sentence: '1. PERSONAL INFORMATION', x: 130, y: 158, width: 70, height: 10 },
-  { text: 'INFORMATION', sentence: '1. PERSONAL INFORMATION', x: 205, y: 158, width: 90, height: 10 },
-  { text: 'PWD', sentence: '2. PWD TYPE OF DISABILITY', x: 420, y: 158, width: 35, height: 10 },
-  { text: 'LAST NAME:', sentence: 'LAST NAME: DE LA CRUZ', x: 108, y: 172, width: 55, height: 8 },
-  { text: 'FIRST NAME:', sentence: 'FIRST NAME: JUAN', x: 108, y: 186, width: 55, height: 8 },
-  { text: 'MIDDLE NAME:', sentence: 'MIDDLE NAME: SANTOS', x: 108, y: 200, width: 62, height: 8 },
-  { text: 'BARANGAY:', sentence: 'BARANGAY: SAN JOSE', x: 108, y: 228, width: 50, height: 8 },
-  { text: 'CITY/MUNICIPALITY:', sentence: 'CITY/MUNICIPALITY: QUEZON CITY', x: 108, y: 242, width: 85, height: 8 },
-  { text: 'INDIGENOUS', sentence: '3. INDIGENOUS PEOPLE', x: 130, y: 275, width: 75, height: 10 },
-  { text: 'PEOPLE', sentence: '3. INDIGENOUS PEOPLE', x: 210, y: 275, width: 50, height: 10 },
-  { text: 'Deaf/Hard of Hearing', sentence: 'Deaf/Hard of Hearing Disability', x: 300, y: 186, width: 95, height: 8 },
-  { text: 'Psychosocial', sentence: 'Psychosocial Disability', x: 430, y: 186, width: 65, height: 8 },
-  { text: 'Visual', sentence: 'Visual Impairment', x: 430, y: 214, width: 35, height: 8 },
-  { text: 'Physical', sentence: 'Physical Disability', x: 300, y: 242, width: 45, height: 8 },
+  {
+    text: "SUPPLEMENTARY/UPDATING",
+    sentence: "SUPPLEMENTARY/UPDATING OF DATA",
+    x: 230,
+    y: 135,
+    width: 140,
+    height: 12,
+  },
+  {
+    text: "PERSONAL",
+    sentence: "1. PERSONAL INFORMATION",
+    x: 130,
+    y: 158,
+    width: 70,
+    height: 10,
+  },
+  {
+    text: "INFORMATION",
+    sentence: "1. PERSONAL INFORMATION",
+    x: 205,
+    y: 158,
+    width: 90,
+    height: 10,
+  },
+  {
+    text: "PWD",
+    sentence: "2. PWD TYPE OF DISABILITY",
+    x: 420,
+    y: 158,
+    width: 35,
+    height: 10,
+  },
+  {
+    text: "LAST NAME:",
+    sentence: "LAST NAME: DE LA CRUZ",
+    x: 108,
+    y: 172,
+    width: 55,
+    height: 8,
+  },
+  {
+    text: "FIRST NAME:",
+    sentence: "FIRST NAME: JUAN",
+    x: 108,
+    y: 186,
+    width: 55,
+    height: 8,
+  },
+  {
+    text: "MIDDLE NAME:",
+    sentence: "MIDDLE NAME: SANTOS",
+    x: 108,
+    y: 200,
+    width: 62,
+    height: 8,
+  },
+  {
+    text: "BARANGAY:",
+    sentence: "BARANGAY: SAN JOSE",
+    x: 108,
+    y: 228,
+    width: 50,
+    height: 8,
+  },
+  {
+    text: "CITY/MUNICIPALITY:",
+    sentence: "CITY/MUNICIPALITY: QUEZON CITY",
+    x: 108,
+    y: 242,
+    width: 85,
+    height: 8,
+  },
+  {
+    text: "INDIGENOUS",
+    sentence: "3. INDIGENOUS PEOPLE",
+    x: 130,
+    y: 275,
+    width: 75,
+    height: 10,
+  },
+  {
+    text: "PEOPLE",
+    sentence: "3. INDIGENOUS PEOPLE",
+    x: 210,
+    y: 275,
+    width: 50,
+    height: 10,
+  },
+  {
+    text: "Deaf/Hard of Hearing",
+    sentence: "Deaf/Hard of Hearing Disability",
+    x: 300,
+    y: 186,
+    width: 95,
+    height: 8,
+  },
+  {
+    text: "Psychosocial",
+    sentence: "Psychosocial Disability",
+    x: 430,
+    y: 186,
+    width: 65,
+    height: 8,
+  },
+  {
+    text: "Visual",
+    sentence: "Visual Impairment",
+    x: 430,
+    y: 214,
+    width: 35,
+    height: 8,
+  },
+  {
+    text: "Physical",
+    sentence: "Physical Disability",
+    x: 300,
+    y: 242,
+    width: 45,
+    height: 8,
+  },
 ];
 
 export default function HomeScreen() {
   const { t } = useLocalization();
   const navigation = useNavigation();
 
-  const [image, setImage] = useState<{ uri: string; width: number; height: number } | null>(null);
+  const [image, setImage] = useState<{
+    uri: string;
+    width: number;
+    height: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBoxItem[]>([]);
-  const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(null);
+  const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(
+    null,
+  );
 
   // Card Layout Dimensions for scaling coordinates
-  const [cardLayout, setCardLayout] = useState<{ width: number; height: number }>({
+  const [cardLayout, setCardLayout] = useState<{
+    width: number;
+    height: number;
+  }>({
     width: 0,
     height: 0,
   });
@@ -114,20 +234,27 @@ export default function HomeScreen() {
 
   useEffect(() => {
     navigation.setOptions({
-      tabBarStyle: image ? { display: 'none' } : undefined,
+      tabBarStyle: image ? { display: "none" } : undefined,
     });
   }, [image, navigation]);
 
-  const processImageOCR = async (uri: string, originalWidth: number, originalHeight: number) => {
+  const processImageOCR = async (
+    uri: string,
+    originalWidth: number,
+    originalHeight: number,
+  ) => {
     setImage({ uri, width: originalWidth, height: originalHeight });
     setIsLoading(true);
     setSelectedWord(null);
 
     try {
       const blurScore = await ExpoBlurDetector.getBlurScore(uri);
-      
+
       if (blurScore < 1000.0) {
-        Alert.alert("Image Blurry", "The image is too blurry. Please upload a clearer photo.");
+        Alert.alert(
+          "Image Blurry",
+          "The image is too blurry. Please upload a clearer photo.",
+        );
         setImage(null);
         setIsLoading(false);
         return;
@@ -136,11 +263,11 @@ export default function HomeScreen() {
       const ocrSettings = await getOcrSettings();
       let data: BoundingBoxItem[] = [];
 
-      if (ocrSettings.mode === 'desktop') {
+      if (ocrSettings.mode === "desktop") {
         const url = `http://${ocrSettings.desktopIp}:8000/predict`;
         const response = await FileSystem.uploadAsync(url, uri, {
-          fieldName: 'file',
-          httpMethod: 'POST',
+          fieldName: "file",
+          httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         });
 
@@ -155,7 +282,7 @@ export default function HomeScreen() {
             height: box.height,
           }));
         } else {
-          throw new Error('Desktop OCR failed with status ' + response.status);
+          throw new Error("Desktop OCR failed with status " + response.status);
         }
       } else {
         // Process locally with Google ML Kit
@@ -164,16 +291,21 @@ export default function HomeScreen() {
         result.blocks.forEach((block: any) => {
           // Create context sentence by concatenating all lines in the block
           const blockSentence = block.lines
-            ? block.lines.map((l: any) => l.text).join(' ')
+            ? block.lines.map((l: any) => l.text).join(" ")
             : block.text;
 
           if (block.lines) {
             block.lines.forEach((line: any) => {
               if (line.elements) {
+                // Remember which line each word is on, and whether it is the 1st, 2nd...
+                // time that word appears on the line (see camera.tsx).
+                const nextOccurrence = createOccurrenceCounter();
                 line.elements.forEach((element: any) => {
                   data.push({
                     text: element.text,
                     sentence: blockSentence, // Keep block context for the dictionary LLM
+                    line: line.text,
+                    occurrence: nextOccurrence(element.text),
                     x: element.frame?.left || 0,
                     y: element.frame?.top || 0,
                     width: element.frame?.width || 0,
@@ -185,6 +317,8 @@ export default function HomeScreen() {
                 data.push({
                   text: line.text,
                   sentence: blockSentence,
+                  line: line.text,
+                  occurrence: 0,
                   x: line.frame?.left || 0,
                   y: line.frame?.top || 0,
                   width: line.frame?.width || 0,
@@ -197,6 +331,8 @@ export default function HomeScreen() {
             data.push({
               text: block.text,
               sentence: blockSentence,
+              line: block.text,
+              occurrence: 0,
               x: block.frame?.left || 0,
               y: block.frame?.top || 0,
               width: block.frame?.width || 0,
@@ -208,14 +344,17 @@ export default function HomeScreen() {
 
       console.log(`✅ Received ${data.length} bounding boxes from OCR!`);
       setBoundingBoxes(data);
-      
+
       // Save to recents in the background
-      saveRecentForm(uri, data).catch(err => console.log('Failed to save to recents', err));
+      saveRecentForm(uri, data).catch((err) =>
+        console.log("Failed to save to recents", err),
+      );
     } catch (e) {
-      console.error('ML Kit OCR Processing Error:', e);
+      console.error("ML Kit OCR Processing Error:", e);
       Alert.alert(
-        'Processing Error',
-        'Could not run text recognition locally. Details: ' + (e instanceof Error ? e.message : String(e))
+        "Processing Error",
+        "Could not run text recognition locally. Details: " +
+          (e instanceof Error ? e.message : String(e)),
       );
     } finally {
       setIsLoading(false);
@@ -223,19 +362,20 @@ export default function HomeScreen() {
   };
 
   const takePhoto = async () => {
-    router.push('/camera' as any);
+    router.push("/camera" as any);
   };
 
   const pickImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Sorry, we need camera roll permissions to make this work!');
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        alert("Sorry, we need camera roll permissions to make this work!");
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 1,
       });
@@ -245,8 +385,8 @@ export default function HomeScreen() {
         processImageOCR(asset.uri, asset.width || 600, asset.height || 800);
       }
     } catch (error) {
-      console.log('Error picking image:', error);
-      alert('Failed to pick image');
+      console.log("Error picking image:", error);
+      alert("Failed to pick image");
     }
   };
 
@@ -260,7 +400,7 @@ export default function HomeScreen() {
     setBoundingBoxes([]);
     setSelectedWord(null);
     setIsLoading(false);
-    
+
     // Reset zoom state
     scale.value = 1;
     savedScale.value = 1;
@@ -276,7 +416,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.loadingScreenContainer}>
         <View style={styles.loadingCenterBox}>
           <LinearGradient
-            colors={['#E5E5E5', '#1A1A1A']}
+            colors={["#E5E5E5", "#1A1A1A"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.progressBar}
@@ -295,7 +435,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.previewHeaderContainer}>
-          <Text style={styles.title}>{t('app_title')}</Text>
+          <Text style={styles.title}>{t("app_title")}</Text>
           <TouchableOpacity onPress={handleReset} style={styles.resetButton}>
             <Ionicons name="close-circle-outline" size={28} color="#666" />
           </TouchableOpacity>
@@ -304,8 +444,22 @@ export default function HomeScreen() {
         <View style={styles.previewCardContainer}>
           <View style={styles.darkCard} onLayout={handleCardLayout}>
             <GestureDetector gesture={composedGesture}>
-              <Animated.View style={[StyleSheet.absoluteFill, animatedStyle, { padding: 20, justifyContent: 'center', alignItems: 'center' }]}>
-                <Image source={{ uri: image.uri }} style={styles.documentImage} resizeMode="contain" />
+              <Animated.View
+                style={[
+                  StyleSheet.absoluteFill,
+                  animatedStyle,
+                  {
+                    padding: 20,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  },
+                ]}
+              >
+                <Image
+                  source={{ uri: image.uri }}
+                  style={styles.documentImage}
+                  resizeMode="contain"
+                />
 
                 {/* Google Lens Interactive Bounding Box Overlays */}
                 {cardLayout.width > 0 &&
@@ -365,6 +519,8 @@ export default function HomeScreen() {
           visible={selectedWord !== null}
           wordText={selectedWord ? selectedWord.text : null}
           wordSentence={selectedWord ? selectedWord.sentence : undefined}
+          wordLine={selectedWord ? selectedWord.line : undefined}
+          wordOccurrence={selectedWord ? selectedWord.occurrence : undefined}
           onClose={() => setSelectedWord(null)}
         />
       </SafeAreaView>
@@ -376,19 +532,19 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.headerContainer}>
-          <Text style={styles.title}>{t('app_title')}</Text>
-          <Text style={styles.subtitle}>{t('subtitle')}</Text>
+          <Text style={styles.title}>{t("app_title")}</Text>
+          <Text style={styles.subtitle}>{t("subtitle")}</Text>
         </View>
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity style={styles.actionButton} onPress={takePhoto}>
             <Ionicons name="camera" size={80} color="white" />
-            <Text style={styles.actionButtonText}>{t('btn_take_photo')}</Text>
+            <Text style={styles.actionButtonText}>{t("btn_take_photo")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionButton} onPress={pickImage}>
             <Ionicons name="cloud-upload" size={80} color="white" />
-            <Text style={styles.actionButtonText}>{t('btn_choose_photo')}</Text>
+            <Text style={styles.actionButtonText}>{t("btn_choose_photo")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -399,7 +555,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: "#F9F9F9",
   },
   scrollContent: {
     flexGrow: 1,
@@ -412,66 +568,66 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "#000",
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
     lineHeight: 24,
   },
   buttonContainer: {
     paddingHorizontal: 24,
     gap: 32,
-    alignItems: 'center',
+    alignItems: "center",
   },
   actionButton: {
-    backgroundColor: '#2182DE',
+    backgroundColor: "#2182DE",
     width: 306,
     height: 173,
     borderRadius: 35,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: 12,
   },
   actionButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   loadingScreenContainer: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F9F9F9",
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingCenterBox: {
-    width: '80%',
-    alignItems: 'center',
+    width: "80%",
+    alignItems: "center",
   },
   progressBar: {
-    width: '100%',
+    width: "100%",
     height: 24,
     borderRadius: 12,
     marginBottom: 24,
   },
   loadingTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "#000",
     marginBottom: 16,
   },
   loadingSubtitle: {
     fontSize: 12,
-    color: '#888',
-    textAlign: 'center',
+    color: "#888",
+    textAlign: "center",
     lineHeight: 18,
   },
   previewHeaderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 12,
@@ -486,39 +642,39 @@ const styles = StyleSheet.create({
   },
   darkCard: {
     flex: 1,
-    backgroundColor: '#2C2D30',
+    backgroundColor: "#2C2D30",
     borderRadius: 24,
     padding: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
   },
   documentImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 8,
   },
   boundingBox: {
-    position: 'absolute',
-    backgroundColor: 'rgba(33, 130, 222, 0.3)',
+    position: "absolute",
+    backgroundColor: "rgba(33, 130, 222, 0.3)",
     borderWidth: 1,
-    borderColor: '#2182DE',
+    borderColor: "#2182DE",
     borderRadius: 4,
   },
   selectedBoundingBox: {
-    backgroundColor: 'rgba(255, 204, 0, 0.5)',
-    borderColor: '#FFCC00',
+    backgroundColor: "rgba(255, 204, 0, 0.5)",
+    borderColor: "#FFCC00",
     borderWidth: 2,
   },
   wordDetailCard: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 30,
     left: 24,
     right: 24,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
@@ -526,19 +682,19 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   wordHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 4,
   },
   wordText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: "bold",
+    color: "#000",
   },
   contextText: {
     fontSize: 14,
-    color: '#555',
-    fontStyle: 'italic',
+    color: "#555",
+    fontStyle: "italic",
   },
 });

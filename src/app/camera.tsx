@@ -1,13 +1,13 @@
-import AiDictionaryModal from '@/components/ai-dictionary-modal';
-import { getOcrSettings } from '@/utils/ocr-settings';
-import { saveRecentForm } from '@/utils/storage';
-import { Ionicons } from '@expo/vector-icons';
-import TextRecognition from '@react-native-ml-kit/text-recognition';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as ImageManipulator from 'expo-image-manipulator';
-import ExpoBlurDetector from '../../modules/expo-blur-detector/src/ExpoBlurDetectorModule';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import { getOcrSettings } from "@/utils/ocr-settings";
+import { createOccurrenceCounter } from "@/utils/phrase-match";
+import { saveRecentForm } from "@/utils/storage";
+import { Ionicons } from "@expo/vector-icons";
+import TextRecognition from "@react-native-ml-kit/text-recognition";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
+import { router } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,19 +17,25 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import DocumentScanner from 'react-native-document-scanner-plugin';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import DocumentScanner from "react-native-document-scanner-plugin";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ExpoBlurDetector from "../../modules/expo-blur-detector/src/ExpoBlurDetectorModule";
 
 export interface BoundingBoxItem {
   id?: string;
   text: string;
-  sentence?: string;
-  x: number;      // Original image pixel X
-  y: number;      // Original image pixel Y
-  width: number;  // Original image pixel width
+  sentence?: string; // the whole text block around the word
+  line?: string; // the single line of text the word is on
+  occurrence?: number; // 0 = first time this word appears on its line, 1 = second, ...
+  x: number; // Original image pixel X
+  y: number; // Original image pixel Y
+  width: number; // Original image pixel width
   height: number; // Original image pixel height
 }
 
@@ -41,23 +47,45 @@ export default function CameraOCRScreen() {
   } | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState('Processing document with OCR...');
+  const [loadingMessage, setLoadingMessage] = useState(
+    "Processing document with OCR...",
+  );
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBoxItem[]>([]);
-  const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(null);
+  const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(
+    null,
+  );
 
   // Layout container dimensions for accurate coordinate scaling
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
+  const [containerSize, setContainerSize] = useState<{
+    width: number;
+    height: number;
+  }>({
     width: 0,
     height: 0,
   });
 
-  // Automatically trigger document scanner when there is no captured image
-  useEffect(() => {
-    if (!capturedImage && !isScannerOpen && !isProcessing) {
-      launchScanner();
+  // Guards so the scanner is opened exactly once per request:
+  // - hasAutoLaunchedRef: the automatic launch when this screen first appears
+  // - scannerBusyRef: blocks a second launch while one is already in progress
+  const hasAutoLaunchedRef = useRef(false);
+  const scannerBusyRef = useRef(false);
+
+  // Leave this screen and go back to where the user came from.
+  const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
     }
-  }, [capturedImage, isScannerOpen, isProcessing]);
+  };
+
+  // Open the document scanner ONCE when the screen first appears.
+  // Any later scan (retry / refresh) is started explicitly by the user.
+  useEffect(() => {
+    if (hasAutoLaunchedRef.current) return;
+    hasAutoLaunchedRef.current = true;
+    launchScanner();
+  }, []);
 
   // --- Zoom & Pan Gesture State ---
   const scale = useSharedValue(1);
@@ -104,7 +132,8 @@ export default function CameraOCRScreen() {
   }));
 
   const launchScanner = async () => {
-    setIsScannerOpen(true);
+    if (scannerBusyRef.current) return;
+    scannerBusyRef.current = true;
     try {
       const { scannedImages } = await DocumentScanner.scanDocument({
         maxNumDocuments: 1,
@@ -113,36 +142,28 @@ export default function CameraOCRScreen() {
       if (scannedImages && scannedImages.length > 0) {
         await processImage(scannedImages[0]);
       } else {
-        // User cancelled scanning, return to previous screen safely
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace('/');
-        }
+        // User cancelled scanning: go back. The scanner does NOT reopen by itself.
+        goBack();
       }
     } catch (error) {
-      console.error('Scanner error:', error);
-      Alert.alert('Scanner Error', 'Failed to open document scanner.');
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/');
-      }
+      console.error("Scanner error:", error);
+      Alert.alert("Scanner Error", "Failed to open document scanner.");
+      goBack();
     } finally {
-      setIsScannerOpen(false);
+      scannerBusyRef.current = false;
     }
   };
 
   const processImage = async (uri: string) => {
     try {
       setIsProcessing(true);
-      setLoadingMessage('Optimizing image...');
+      setLoadingMessage("Optimizing image...");
 
       // Resize the image to 1000px width (maintaining aspect ratio) to drastically reduce upload size
       const manipResult = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: 1000 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
 
       setCapturedImage({
@@ -151,27 +172,35 @@ export default function CameraOCRScreen() {
         height: manipResult.height,
       });
 
-      setLoadingMessage('Checking image quality...');
-      
+      setLoadingMessage("Checking image quality...");
+
       const blurScore = await ExpoBlurDetector.getBlurScore(manipResult.uri);
-      
+
       if (blurScore < 1000.0) {
-        Alert.alert("Image Blurry", "The image is too blurry. Please hold steady and try again.");
+        Alert.alert(
+          "Image Blurry",
+          "The image is too blurry. Please hold steady and try again.",
+          [
+            { text: "Cancel", style: "cancel", onPress: goBack },
+            { text: "Try Again", onPress: () => launchScanner() },
+          ],
+          { cancelable: false },
+        );
         setCapturedImage(null);
         setIsProcessing(false);
         return;
       }
 
-      setLoadingMessage('Uploading image...');
+      setLoadingMessage("Uploading image...");
 
       const ocrSettings = await getOcrSettings();
       let data: BoundingBoxItem[] = [];
 
-      if (ocrSettings.mode === 'desktop') {
+      if (ocrSettings.mode === "desktop") {
         const url = `http://${ocrSettings.desktopIp}:8000/predict`;
         const response = await FileSystem.uploadAsync(url, manipResult.uri, {
-          fieldName: 'file',
-          httpMethod: 'POST',
+          fieldName: "file",
+          httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         });
 
@@ -186,7 +215,7 @@ export default function CameraOCRScreen() {
             height: box.height,
           }));
         } else {
-          throw new Error('Desktop OCR failed with status ' + response.status);
+          throw new Error("Desktop OCR failed with status " + response.status);
         }
       } else {
         // Skip Python Server! Process locally with Google ML Kit.
@@ -195,16 +224,22 @@ export default function CameraOCRScreen() {
         result.blocks.forEach((block: any) => {
           // Create context sentence by concatenating all lines in the block
           const blockSentence = block.lines
-            ? block.lines.map((l: any) => l.text).join(' ')
+            ? block.lines.map((l: any) => l.text).join(" ")
             : block.text;
 
           if (block.lines) {
             block.lines.forEach((line: any) => {
               if (line.elements) {
+                // Remember which line each word is on, and whether it is the 1st, 2nd...
+                // time that word appears on the line, so "Date" in "Date of Birth" can be
+                // understood as part of that whole phrase.
+                const nextOccurrence = createOccurrenceCounter();
                 line.elements.forEach((element: any) => {
                   data.push({
                     text: element.text,
                     sentence: blockSentence, // Keep block context for the dictionary LLM
+                    line: line.text,
+                    occurrence: nextOccurrence(element.text),
                     x: element.frame?.left || 0,
                     y: element.frame?.top || 0,
                     width: element.frame?.width || 0,
@@ -216,6 +251,8 @@ export default function CameraOCRScreen() {
                 data.push({
                   text: line.text,
                   sentence: blockSentence,
+                  line: line.text,
+                  occurrence: 0,
                   x: line.frame?.left || 0,
                   y: line.frame?.top || 0,
                   width: line.frame?.width || 0,
@@ -228,6 +265,8 @@ export default function CameraOCRScreen() {
             data.push({
               text: block.text,
               sentence: blockSentence,
+              line: block.text,
+              occurrence: 0,
               x: block.frame?.left || 0,
               y: block.frame?.top || 0,
               width: block.frame?.width || 0,
@@ -240,12 +279,20 @@ export default function CameraOCRScreen() {
       setBoundingBoxes(data);
 
       // Save to recents in the background
-      saveRecentForm(manipResult.uri, data).catch(err => console.log('Failed to save to recents', err));
+      saveRecentForm(manipResult.uri, data).catch((err) =>
+        console.log("Failed to save to recents", err),
+      );
     } catch (error) {
-      console.error('ML Kit OCR Processing Error:', error);
+      console.error("ML Kit OCR Processing Error:", error);
       Alert.alert(
-        'Processing Error',
-        'Could not run text recognition locally. Details: ' + (error instanceof Error ? error.message : String(error))
+        "Processing Error",
+        "Could not run text recognition locally. Details: " +
+          (error instanceof Error ? error.message : String(error)),
+        [
+          { text: "Cancel", style: "cancel", onPress: goBack },
+          { text: "Try Again", onPress: () => launchScanner() },
+        ],
+        { cancelable: false },
       );
       setCapturedImage(null);
     } finally {
@@ -253,14 +300,13 @@ export default function CameraOCRScreen() {
     }
   };
 
-  // Reset to trigger scanner again
+  // Reset and open the scanner again (explicit user action: refresh button)
   const handleReset = () => {
     setCapturedImage(null);
     setBoundingBoxes([]);
     setSelectedWord(null);
     setIsProcessing(false);
-    setIsScannerOpen(false);
-    setLoadingMessage('Processing document with OCR...');
+    setLoadingMessage("Processing document with OCR...");
 
     // Reset zoom state
     scale.value = 1;
@@ -269,15 +315,20 @@ export default function CameraOCRScreen() {
     translateY.value = 0;
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
+
+    launchScanner();
   };
 
   // Handle Box Tap
   const handleBoxPress = (item: BoundingBoxItem) => {
     setSelectedWord(item);
-    console.log('----------------------------------------');
-    console.log('📌 TAPPED WORD:', item.text);
-    console.log('📖 CONTEXT SENTENCE:', item.sentence || 'No context sentence provided.');
-    console.log('----------------------------------------');
+    console.log("----------------------------------------");
+    console.log("📌 TAPPED WORD:", item.text);
+    console.log(
+      "📖 CONTEXT SENTENCE:",
+      item.sentence || "No context sentence provided.",
+    );
+    console.log("----------------------------------------");
   };
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -350,16 +401,7 @@ export default function CameraOCRScreen() {
 
           {/* Header Controls overlay */}
           <SafeAreaView style={styles.overlayHeader}>
-            <TouchableOpacity 
-              style={styles.iconButton} 
-              onPress={() => {
-                if (router.canGoBack()) {
-                  router.back();
-                } else {
-                  router.replace('/');
-                }
-              }}
-            >
+            <TouchableOpacity style={styles.iconButton} onPress={goBack}>
               <Ionicons name="arrow-back" size={26} color="white" />
             </TouchableOpacity>
 
@@ -373,6 +415,8 @@ export default function CameraOCRScreen() {
             visible={selectedWord !== null}
             wordText={selectedWord ? selectedWord.text : null}
             wordSentence={selectedWord ? selectedWord.sentence : undefined}
+            wordLine={selectedWord ? selectedWord.line : undefined}
+            wordOccurrence={selectedWord ? selectedWord.occurrence : undefined}
             onClose={() => setSelectedWord(null)}
           />
 
@@ -388,7 +432,9 @@ export default function CameraOCRScreen() {
         /* State 2: Waiting/Loading (Native Scanner overlays this) */
         <SafeAreaView style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={{ color: 'white', marginTop: 10 }}>Opening Document Scanner...</Text>
+          <Text style={{ color: "white", marginTop: 10 }}>
+            Opening Document Scanner...
+          </Text>
         </SafeAreaView>
       )}
     </View>
@@ -398,69 +444,69 @@ export default function CameraOCRScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
   },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
   },
   iconButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   previewContainer: {
     flex: 1,
-    position: 'relative',
-    backgroundColor: '#000',
+    position: "relative",
+    backgroundColor: "#000",
   },
   fullImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   boundingBox: {
-    position: 'absolute',
-    backgroundColor: 'rgba(33, 130, 222, 0.25)',
+    position: "absolute",
+    backgroundColor: "rgba(33, 130, 222, 0.25)",
     borderWidth: 1,
-    borderColor: '#2182DE',
+    borderColor: "#2182DE",
     borderRadius: 3,
   },
   selectedBoundingBox: {
-    backgroundColor: 'rgba(255, 204, 0, 0.45)',
-    borderColor: '#FFCC00',
+    backgroundColor: "rgba(255, 204, 0, 0.45)",
+    borderColor: "#FFCC00",
     borderWidth: 2,
   },
   overlayHeader: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 10,
     zIndex: 10,
   },
   processingOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 30,
   },
   processingText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
     marginTop: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
