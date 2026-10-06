@@ -10,10 +10,12 @@
 export const normalizeToken = (text: string): string =>
   text.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f]+/g, "");
 
-// Splits text into normalized word tokens.
+// Splits text into normalized word tokens. Slashes, hyphens, parentheses, commas
+// and similar marks separate words, so "Month/Day/Year" and "Month / Day / Year"
+// (two ways OCR may read the same text) give the same words.
 export const tokenize = (text: string): string[] =>
   text
-    .split(/\s+/)
+    .split(/[\s/\\()\[\],;:\u2013\u2014-]+/)
     .map(normalizeToken)
     .filter((t) => t !== "");
 
@@ -102,19 +104,17 @@ const findSpans = (
   return spans;
 };
 
-// True when `term` appears in `line` and that occurrence includes the tapped word.
-export const phraseCoversTap = (
-  term: string,
-  line: string,
-  tapped: string,
-  occurrence: number = 0,
+// Token version: the term's words appear in a row in the line AND that stretch
+// includes the tapped word.
+const coversTokens = (
+  lineTokens: string[],
+  termTokens: string[],
+  tappedTokens: string[],
+  occurrence: number,
 ): boolean => {
-  const lineTokens = tokenize(line);
-  const termTokens = tokenize(term);
   const spans = findSpans(lineTokens, termTokens);
   if (spans.length === 0) return false;
 
-  const tappedTokens = tokenize(tapped);
   // Tapped box is not a single word (e.g. a whole line): any occurrence counts.
   if (tappedTokens.length !== 1) return true;
 
@@ -122,6 +122,15 @@ export const phraseCoversTap = (
   if (target === -1) return false;
   return spans.some(([start, end]) => target >= start && target < end);
 };
+
+// True when `term` appears in `line` and that occurrence includes the tapped word.
+export const phraseCoversTap = (
+  term: string,
+  line: string,
+  tapped: string,
+  occurrence: number = 0,
+): boolean =>
+  coversTokens(tokenize(line), tokenize(term), tokenize(tapped), occurrence);
 
 // Checks the phrase Gemini reported. If it is missing, too long, or does not
 // actually contain the tapped word on that line, falls back to the tapped word.
@@ -217,3 +226,130 @@ export const tokenSimilarity = (a: string, b: string): number => {
   }
   return shared / (tokensA.length + tokensB.length - shared);
 };
+
+// ---------------------------------------------------------------------------
+// Dictionary matching (bundled Bisaya dictionary)
+// ---------------------------------------------------------------------------
+
+export interface IndexedTerm<T> {
+  item: T;
+  tokens: string[];
+  generic: boolean;
+}
+
+// Prepares the dictionary once so each tap does not re-split every term.
+// `genericKeys` are terms that appear all over forms with different meanings
+// (YES, NO, TO, Date, Name...). They only match when they are the WHOLE line.
+export const indexTerms = <T>(
+  items: T[],
+  getTerm: (item: T) => string,
+  genericKeys: Set<string>,
+): IndexedTerm<T>[] =>
+  items
+    .map((item) => {
+      const tokens = tokenize(getTerm(item));
+      return { item, tokens, generic: genericKeys.has(tokens.join(" ")) };
+    })
+    .filter((entry) => entry.tokens.length > 0);
+
+// Terms this long are usually checkbox statements that wrap over several printed
+// lines, so they are also looked for in the whole text block.
+export const LONG_TERM_MIN_TOKENS = 5;
+
+// Finds the best dictionary entry for a tapped word:
+//  - the entry's words must appear in a row on the tapped line (or, for long
+//    statements, in the surrounding text block) and include the tapped word
+//  - generic entries (see indexTerms) must be the whole line
+//  - the longest (most specific) entry wins
+export const findDictionaryMatch = <T>(
+  index: IndexedTerm<T>[],
+  tapped: string,
+  line: string,
+  occurrence: number = 0,
+  block?: string,
+): T | null => {
+  const tappedTokens = tokenize(tapped);
+  let lineTokens = tokenize(line);
+  if (lineTokens.length === 0) lineTokens = tappedTokens;
+  if (lineTokens.length === 0) return null;
+
+  // The line without leading numbering ("12. Date" -> "date"), used for the
+  // whole-line rule of generic entries.
+  let wholeLine = lineTokens;
+  while (wholeLine.length > 1 && /^(\d+|[a-z])$/.test(wholeLine[0])) {
+    wholeLine = wholeLine.slice(1);
+  }
+
+  // The text block is prepared only if a long term needs it.
+  let blockReady = false;
+  let blockTokens: string[] = [];
+  let blockTarget = -1; // index of the tapped word in the block, -2 = "any"
+  const prepareBlock = () => {
+    if (blockReady) return;
+    blockReady = true;
+    blockTokens = block ? tokenize(block) : [];
+    if (blockTokens.length === 0) return;
+    if (tappedTokens.length !== 1) {
+      blockTarget = -2;
+      return;
+    }
+    const inLine = findTargetIndex(lineTokens, tappedTokens[0], occurrence);
+    const lineSpans = findSpans(blockTokens, lineTokens);
+    if (inLine !== -1 && lineSpans.length > 0) {
+      blockTarget = lineSpans[0][0] + inLine;
+    } else {
+      blockTarget = findTargetIndex(blockTokens, tappedTokens[0], 0);
+    }
+  };
+
+  let best: IndexedTerm<T> | null = null;
+  for (const entry of index) {
+    const size = entry.tokens.length;
+    let hit = false;
+
+    if (entry.generic) {
+      // Ignore leading numbering such as "12." or "A." before the label.
+      hit =
+        size === wholeLine.length &&
+        entry.tokens.every((token, i) => tokensMatch(wholeLine[i], token));
+    } else {
+      hit = coversTokens(lineTokens, entry.tokens, tappedTokens, occurrence);
+      if (!hit && size >= LONG_TERM_MIN_TOKENS && block) {
+        prepareBlock();
+        if (blockTokens.length > 0) {
+          const spans = findSpans(blockTokens, entry.tokens);
+          hit =
+            spans.length > 0 &&
+            (blockTarget === -2 ||
+              (blockTarget >= 0 &&
+                spans.some(
+                  ([start, end]) => blockTarget >= start && blockTarget < end,
+                )));
+        }
+      }
+    }
+
+    if (!hit) continue;
+    if (
+      !best ||
+      size > best.tokens.length ||
+      (size === best.tokens.length && best.generic && !entry.generic)
+    ) {
+      best = entry;
+    }
+  }
+  return best ? best.item : null;
+};
+
+// True when the needle's words appear in a row inside the haystack's words
+// (a one-letter OCR slip in a longer word is forgiven).
+export const containsPhrase = (haystack: string[], needle: string[]): boolean =>
+  needle.length > 0 && findSpans(haystack, needle).length > 0;
+
+// True when every given word appears somewhere in the haystack (any order).
+export const containsAllWords = (
+  haystack: string[],
+  words: string[],
+): boolean =>
+  words.length > 0 &&
+  words.every((word) => haystack.some((token) => tokensMatch(token, word)));

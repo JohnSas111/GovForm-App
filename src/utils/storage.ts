@@ -32,6 +32,9 @@ export interface RecentForm {
   dateStr: string;
   thumbnailUri: string;
   words: Array<HarvestedWord | string>;
+  // Which supported form this scan is: a form id, "none" if the user said it is not one
+  // of them, or empty when not decided yet (the app then works it out again).
+  formId?: string | null;
 }
 
 const STORAGE_KEY = "@govform_recent_scans";
@@ -39,6 +42,7 @@ const STORAGE_KEY = "@govform_recent_scans";
 export const saveRecentForm = async (
   originalUri: string,
   boundingBoxes: BoundingBoxItem[],
+  formId?: string | null,
 ) => {
   try {
     // 1. Copy image to a permanent document directory so it doesn't get cleared by the OS
@@ -65,6 +69,7 @@ export const saveRecentForm = async (
       dateStr: new Date().toLocaleString(),
       thumbnailUri: permanentUri,
       words,
+      formId: formId ?? null,
     };
 
     // 4. Save to AsyncStorage
@@ -79,6 +84,25 @@ export const saveRecentForm = async (
   } catch (error) {
     console.error("Error saving recent form:", error);
     throw error;
+  }
+};
+
+// Saves the form the user picked for a scan (null = "not one of the supported forms").
+export const updateRecentFormId = async (
+  id: string,
+  formId: string | null,
+): Promise<boolean> => {
+  try {
+    const str = await AsyncStorage.getItem(STORAGE_KEY);
+    const list: RecentForm[] = str ? JSON.parse(str) : [];
+    const record = list.find((r) => r.id === id);
+    if (!record) return false;
+    record.formId = formId ?? "none";
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return true;
+  } catch (error) {
+    console.error("Error updating the form of a saved scan:", error);
+    return false;
   }
 };
 

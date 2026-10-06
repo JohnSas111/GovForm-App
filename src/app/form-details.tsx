@@ -1,9 +1,15 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import FormSummaryChip from "@/components/form-summary-sheet";
 import { useLocalization } from "@/context/LocalizationContext";
-import { getRecentFormById, HarvestedWord, RecentForm } from "@/utils/storage";
+import {
+  getRecentFormById,
+  HarvestedWord,
+  RecentForm,
+  updateRecentFormId,
+} from "@/utils/storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -42,6 +48,13 @@ export default function FormDetailsScreen() {
     };
     loadForm();
   }, [id]);
+
+  // The words of this scan in the shape the form recognizer expects (older scans store plain text).
+  const chipBoxes = useMemo(
+    () =>
+      (form?.words ?? []).map((w) => (typeof w === "string" ? { text: w } : w)),
+    [form],
+  );
 
   const handleWordTap = (wordData: HarvestedWord | string) => {
     const wordText = typeof wordData === "string" ? wordData : wordData.text;
@@ -109,6 +122,16 @@ export default function FormDetailsScreen() {
         GovForm AI.
       </Text>
 
+      {/* Which supported form this is (tap for its summary) */}
+      <View style={styles.formChipRow}>
+        <FormSummaryChip
+          boxes={chipBoxes}
+          initialFormId={form.formId}
+          source="saved"
+          onFormChange={(formId) => updateRecentFormId(form.id, formId)}
+        />
+      </View>
+
       <FlatList
         data={form.words}
         keyExtractor={(item, index) => {
@@ -144,6 +167,10 @@ export default function FormDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
+  formChipRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
   container: { flex: 1, backgroundColor: "#F9F9F9" },
   centerContainer: {
     flex: 1,

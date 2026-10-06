@@ -29,7 +29,34 @@ export type TranslationKey =
   | "btn_explain_sentence"
   | "label_sentence_meaning"
   | "loading_sentence"
-  | "notice_ai_generated";
+  | "notice_ai_generated"
+  | "badge_dictionary"
+  | "research_title"
+  | "research_desc"
+  | "research_privacy"
+  | "research_export"
+  | "research_clear"
+  | "research_clear_msg"
+  | "research_cancel"
+  | "research_helpful"
+  | "research_thanks"
+  | "research_empty"
+  | "form_chip_about"
+  | "form_unsure_chip"
+  | "form_unsure_hint"
+  | "form_picker_title"
+  | "form_none"
+  | "form_not_this"
+  | "form_unavailable"
+  | "form_draft"
+  | "form_label_purpose"
+  | "form_label_who"
+  | "form_label_prepare"
+  | "form_label_sections"
+  | "form_label_submit"
+  | "form_label_reminder"
+  | "form_last_checked"
+  | "research_show_drafts";
 
 export const translations: Record<
   LanguageKey,
@@ -75,6 +102,35 @@ export const translations: Record<
     loading_sentence: "Simplifying…",
     notice_ai_generated:
       "AI-generated. Check with the agency if you're unsure.",
+    badge_dictionary: "From dictionary",
+    research_title: "Research mode (for testers)",
+    research_desc:
+      "Saves how long lookups take, where each answer came from, and your ratings. Everything stays on this phone until you export it.",
+    research_privacy:
+      "The words you tap are saved too, so don't use real personal forms while this is on.",
+    research_export: "Export results (CSV)",
+    research_clear: "Clear results",
+    research_clear_msg: "Delete all saved research results from this phone?",
+    research_cancel: "Cancel",
+    research_helpful: "Was this helpful?",
+    research_thanks: "Thanks for your feedback!",
+    research_empty: "Nothing recorded yet.",
+    form_chip_about: "About this form",
+    form_unsure_chip: "Which form is this?",
+    form_unsure_hint: "This looks like one of these forms.",
+    form_picker_title: "Choose the form",
+    form_none: "None of these",
+    form_not_this: "Not this form?",
+    form_unavailable: "Summary not available yet.",
+    form_draft: "DRAFT: not verified yet",
+    form_label_purpose: "What it is for",
+    form_label_who: "Who uses it",
+    form_label_prepare: "What to prepare",
+    form_label_sections: "What is on the form",
+    form_label_submit: "Where to submit",
+    form_label_reminder: "Reminder",
+    form_last_checked: "Last checked",
+    research_show_drafts: "Show draft form summaries",
   },
   Tagalog: {
     app_title: "GovForm AI",
@@ -117,6 +173,36 @@ export const translations: Record<
     loading_sentence: "Pinapasimple…",
     notice_ai_generated:
       "Gawa ng AI. Magtanong sa ahensya kung hindi ka sigurado.",
+    badge_dictionary: "Mula sa diksyunaryo",
+    research_title: "Research mode (para sa mga tester)",
+    research_desc:
+      "Sine-save ang tagal ng bawat paghahanap, kung saan galing ang sagot, at ang mga rating mo. Mananatili ang lahat sa phone na ito hanggang i-export mo.",
+    research_privacy:
+      "Isine-save rin ang mga salitang pinindot mo, kaya huwag gumamit ng totoong personal na form habang naka-on ito.",
+    research_export: "I-export ang resulta (CSV)",
+    research_clear: "Burahin ang resulta",
+    research_clear_msg:
+      "Burahin ang lahat ng naka-save na research result sa phone na ito?",
+    research_cancel: "Kanselahin",
+    research_helpful: "Nakatulong ba ito?",
+    research_thanks: "Salamat sa feedback mo!",
+    research_empty: "Wala pang naitala.",
+    form_chip_about: "Tungkol sa form na ito",
+    form_unsure_chip: "Anong form ito?",
+    form_unsure_hint: "Mukhang isa ito sa mga form na ito.",
+    form_picker_title: "Piliin ang form",
+    form_none: "Wala sa mga ito",
+    form_not_this: "Hindi ito ang form?",
+    form_unavailable: "Wala pang summary.",
+    form_draft: "DRAFT: hindi pa na-verify",
+    form_label_purpose: "Para saan ito",
+    form_label_who: "Sino ang gumagamit",
+    form_label_prepare: "Ihanda",
+    form_label_sections: "Ano ang nasa form",
+    form_label_submit: "Saan ibibigay",
+    form_label_reminder: "Paalala",
+    form_last_checked: "Huling na-check",
+    research_show_drafts: "Ipakita ang mga draft na summary ng form",
   },
   Cebuano: {
     app_title: "GovForm AI",
@@ -159,5 +245,35 @@ export const translations: Record<
     loading_sentence: "Gihimong sayon…",
     notice_ai_generated:
       "Gihimo sa AI. Pangutan-a ang ahensya kung dili ka sigurado.",
+    badge_dictionary: "Gikan sa diksyonaryo",
+    research_title: "Research mode (para sa mga tester)",
+    research_desc:
+      "Gi-save ang gidugayon sa matag pagpangita, asa gikan ang tubag, ug imong mga rating. Magpabilin ang tanan sa kini nga phone hangtod i-export nimo.",
+    research_privacy:
+      "Gi-save usab ang mga pulong nga imong gi-tap, busa ayaw gamita ang tinuod nga personal nga form samtang naka-on kini.",
+    research_export: "I-export ang resulta (CSV)",
+    research_clear: "Papason ang resulta",
+    research_clear_msg:
+      "Papason ba ang tanang naka-save nga research result niini nga phone?",
+    research_cancel: "Kanselahon",
+    research_helpful: "Nakatabang ba kini?",
+    research_thanks: "Salamat sa imong feedback!",
+    research_empty: "Wala pay natala.",
+    form_chip_about: "Mahitungod niini nga form",
+    form_unsure_chip: "Unsang form kini?",
+    form_unsure_hint: "Morag usa kini niini nga mga form.",
+    form_picker_title: "Pilia ang form",
+    form_none: "Wala niini",
+    form_not_this: "Dili kini nga form?",
+    form_unavailable: "Wala pa'y summary.",
+    form_draft: "DRAFT: wala pa ma-verify",
+    form_label_purpose: "Para saan kini",
+    form_label_who: "Kinsa ang mogamit",
+    form_label_prepare: "Andama",
+    form_label_sections: "Unsa ang naa sa form",
+    form_label_submit: "Asa ihatag",
+    form_label_reminder: "Paalala",
+    form_last_checked: "Katapusang gi-check",
+    research_show_drafts: "Ipakita ang mga draft nga summary sa form",
   },
 };

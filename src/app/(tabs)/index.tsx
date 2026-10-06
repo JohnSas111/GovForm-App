@@ -1,15 +1,18 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import FormSummaryChip from "@/components/form-summary-sheet";
 import { useLocalization } from "@/context/LocalizationContext";
+import { recognizeForm } from "@/utils/form-recognition";
+import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
 import { createOccurrenceCounter } from "@/utils/phrase-match";
-import { saveRecentForm } from "@/utils/storage";
+import { saveRecentForm, updateRecentFormId } from "@/utils/storage";
 import { Ionicons } from "@expo/vector-icons";
 import TextRecognition from "@react-native-ml-kit/text-recognition";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useNavigation } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -175,6 +178,8 @@ export default function HomeScreen() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBoxItem[]>([]);
+  // The saved copy of this scan, so a form the user picks can be saved with it.
+  const savedRecentIdRef = useRef<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(
     null,
   );
@@ -243,6 +248,8 @@ export default function HomeScreen() {
     originalWidth: number,
     originalHeight: number,
   ) => {
+    const startedAt = Date.now(); // research mode: time from photo to word boxes
+    savedRecentIdRef.current = null;
     setImage({ uri, width: originalWidth, height: originalHeight });
     setIsLoading(true);
     setSelectedWord(null);
@@ -251,6 +258,13 @@ export default function HomeScreen() {
       const blurScore = await ExpoBlurDetector.getBlurScore(uri);
 
       if (blurScore < 1000.0) {
+        logEvent({
+          event: "scan_rejected",
+          source: "blur",
+          ms: Date.now() - startedAt,
+          value: String(Math.round(blurScore)),
+          detail: "gallery",
+        });
         Alert.alert(
           "Image Blurry",
           "The image is too blurry. Please upload a clearer photo.",
@@ -344,13 +358,33 @@ export default function HomeScreen() {
 
       console.log(`✅ Received ${data.length} bounding boxes from OCR!`);
       setBoundingBoxes(data);
+      logEvent({
+        event: "scan",
+        source: ocrSettings.mode === "desktop" ? "desktop" : "mlkit",
+        ms: Date.now() - startedAt,
+        value: String(data.length),
+        detail: "gallery",
+      });
 
       // Save to recents in the background
-      saveRecentForm(uri, data).catch((err) =>
-        console.log("Failed to save to recents", err),
-      );
+      // ...together with the supported form it was recognized as, when the app is sure.
+      const recognition = recognizeForm(data);
+      saveRecentForm(
+        uri,
+        data,
+        recognition.status === "confident" ? recognition.formId : null,
+      )
+        .then((record) => {
+          savedRecentIdRef.current = record?.id ?? null;
+        })
+        .catch((err) => console.log("Failed to save to recents", err));
     } catch (e) {
       console.error("ML Kit OCR Processing Error:", e);
+      logEvent({
+        event: "scan_error",
+        ms: Date.now() - startedAt,
+        detail: "gallery",
+      });
       Alert.alert(
         "Processing Error",
         "Could not run text recognition locally. Details: " +
@@ -439,6 +473,18 @@ export default function HomeScreen() {
           <TouchableOpacity onPress={handleReset} style={styles.resetButton}>
             <Ionicons name="close-circle-outline" size={28} color="#666" />
           </TouchableOpacity>
+        </View>
+
+        {/* Which supported form this is (tap for its summary) */}
+        <View style={styles.formChipRow}>
+          <FormSummaryChip
+            boxes={boundingBoxes}
+            source="gallery"
+            onFormChange={(formId) => {
+              if (savedRecentIdRef.current)
+                updateRecentFormId(savedRecentIdRef.current, formId);
+            }}
+          />
         </View>
 
         <View style={styles.previewCardContainer}>
@@ -553,6 +599,10 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  formChipRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
   container: {
     flex: 1,
     backgroundColor: "#F9F9F9",

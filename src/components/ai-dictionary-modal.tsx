@@ -1,5 +1,6 @@
 import { TranslationKey } from "@/constants/translations";
 import { useLocalization } from "@/context/LocalizationContext";
+import { lookupDictionary } from "@/utils/glossary";
 import {
   defineWordWithLLM,
   explainSentenceWithLLM,
@@ -8,6 +9,7 @@ import {
   LLMError,
   LLMResponse,
 } from "@/utils/llm";
+import { isResearchEnabled, logEvent } from "@/utils/metrics";
 import { tokenize } from "@/utils/phrase-match";
 import {
   getApproximateDefinitions,
@@ -98,6 +100,9 @@ export default function AiDictionaryModal({
   const [llmErrorKey, setLlmErrorKey] = useState<TranslationKey | null>(null);
   // True when the answer shown was saved from a different form (offline fallback)
   const [isApproximate, setIsApproximate] = useState(false);
+  // Research mode (testers only): thumbs up/down on the answer
+  const [researchOn, setResearchOn] = useState(false);
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
   // Bumped by the "Try Again" button to run the lookup again
   const [retryCount, setRetryCount] = useState(0);
   // Which section is currently being read aloud (only one at a time).
@@ -130,9 +135,39 @@ export default function AiDictionaryModal({
       setLlmResult(null);
       setLlmErrorKey(null);
       setIsApproximate(false);
+      setRating(null);
       setIsLlmLoading(true);
 
+      // Research mode: how long this lookup took and where the answer came from.
+      const startedAt = Date.now();
+      const record = (source: string, termShown: string, detail?: string) => {
+        if (cancelled) return;
+        logEvent({
+          event: "lookup",
+          language,
+          source,
+          term: termShown,
+          ms: Date.now() - startedAt,
+          detail,
+        });
+      };
+
       try {
+        // 0. Bisaya only: the bundled dictionary (written by people) comes first.
+        //    It works offline and needs no AI request.
+        const fromDictionary = lookupDictionary(
+          wordText,
+          lineContext,
+          occurrence,
+          wordSentence,
+          language,
+        );
+        if (fromDictionary) {
+          record("dictionary", fromDictionary.term ?? wordText);
+          setLlmResult(fromDictionary);
+          return;
+        }
+
         // 1. Check offline cache first. Ignore cached answers that are missing
         //    the selected language (old format / incomplete) and look them up again.
         let cached: LLMResponse | null = null;
@@ -148,6 +183,7 @@ export default function AiDictionaryModal({
         if (cancelled) return;
 
         if (cached && hasUsableResult(cached, language)) {
+          record("cache", cached.term ?? wordText);
           setLlmResult(cached);
           return;
         }
@@ -170,6 +206,7 @@ export default function AiDictionaryModal({
           }
           if (cancelled) return;
           if (approx) {
+            record("cache_approx", approx.term ?? wordText);
             setLlmResult(approx);
             setIsApproximate(true);
             return;
@@ -189,6 +226,7 @@ export default function AiDictionaryModal({
         if (cancelled) return;
 
         // Show the result first; a cache failure must not hide a good answer.
+        record("ai", result.term ?? wordText);
         setLlmResult(result);
 
         // 3. Save to cache for future offline use
@@ -199,6 +237,7 @@ export default function AiDictionaryModal({
         }
       } catch (err) {
         if (cancelled) return;
+        record("error", wordText, getErrorCode(err));
         console.log("Dictionary lookup failed:", err);
         setLlmErrorKey(ERROR_MESSAGE_KEYS[getErrorCode(err)] ?? "err_generic");
       } finally {
@@ -285,6 +324,36 @@ export default function AiDictionaryModal({
       ? llmResult.sample_data.trim()
       : "";
 
+  // Is research mode on? (decides whether the thumbs up/down buttons are shown)
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    isResearchEnabled().then((on) => {
+      if (!cancelled) setResearchOn(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  const handleRate = (value: "up" | "down") => {
+    if (rating !== null) return;
+    setRating(value);
+    const source =
+      llmResult?.source === "dictionary"
+        ? "dictionary"
+        : isApproximate
+          ? "cache_approx"
+          : "ai";
+    logEvent({
+      event: "rating",
+      language,
+      source,
+      term: displayTerm ?? "",
+      value,
+    });
+  };
+
   // The explain button only makes sense for real text (not a single label word).
   const canExplainSentence = showOriginal && tokenize(originalText).length >= 4;
 
@@ -321,6 +390,7 @@ export default function AiDictionaryModal({
 
     setSentenceState("loading");
     setSentenceErrorKey(null);
+    const startedAt = Date.now();
 
     try {
       const networkState = await Network.getNetworkStateAsync();
@@ -341,6 +411,13 @@ export default function AiDictionaryModal({
 
       setSentenceMeaning(meaning);
       setSentenceState("done");
+      logEvent({
+        event: "sentence",
+        language,
+        source: "ai",
+        ms: Date.now() - startedAt,
+        value: `${tokenize(originalText).length} words`,
+      });
 
       try {
         await saveSentenceMeaning(originalText, language, meaning);
@@ -350,6 +427,13 @@ export default function AiDictionaryModal({
     } catch (err) {
       if (controller.signal.aborted) return;
       console.log("Sentence explanation failed:", err);
+      logEvent({
+        event: "sentence",
+        language,
+        source: "error",
+        ms: Date.now() - startedAt,
+        detail: getErrorCode(err),
+      });
       setSentenceErrorKey(
         ERROR_MESSAGE_KEYS[getErrorCode(err)] ?? "err_generic",
       );
@@ -432,6 +516,16 @@ export default function AiDictionaryModal({
               style={styles.resultContainer}
               showsVerticalScrollIndicator={false}
             >
+              {/* Where the answer came from: the human-written dictionary */}
+              {llmResult.source === "dictionary" && (
+                <View style={styles.sourceBadge}>
+                  <Ionicons name="book-outline" size={13} color="#1B6B3A" />
+                  <Text style={styles.sourceBadgeText}>
+                    {t("badge_dictionary")}
+                  </Text>
+                </View>
+              )}
+
               {/* Offline fallback notice */}
               {isApproximate && (
                 <View style={styles.noticeBox}>
@@ -582,11 +676,52 @@ export default function AiDictionaryModal({
                 </View>
               )}
 
-              {/* All answers are AI-generated until a verified dictionary exists */}
-              {definitionText !== "" && (
+              {/* AI answers get a reminder; dictionary answers are not AI-generated */}
+              {definitionText !== "" && llmResult.source !== "dictionary" && (
                 <Text style={[styles.aiNoteText, { marginTop: 14 }]}>
                   {t("notice_ai_generated")}
                 </Text>
+              )}
+
+              {/* Research mode: was this answer helpful? */}
+              {researchOn && definitionText !== "" && (
+                <View style={styles.ratingRow}>
+                  {rating === null ? (
+                    <>
+                      <Text style={styles.ratingText}>
+                        {t("research_helpful")}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.ratingButton}
+                        onPress={() => handleRate("up")}
+                        accessibilityRole="button"
+                        accessibilityLabel="Helpful"
+                      >
+                        <Ionicons
+                          name="thumbs-up-outline"
+                          size={22}
+                          color="#2182DE"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.ratingButton}
+                        onPress={() => handleRate("down")}
+                        accessibilityRole="button"
+                        accessibilityLabel="Not helpful"
+                      >
+                        <Ionicons
+                          name="thumbs-down-outline"
+                          size={22}
+                          color="#B3261E"
+                        />
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={styles.ratingThanks}>
+                      {t("research_thanks")}
+                    </Text>
+                  )}
+                </View>
               )}
 
               {/* Fallback for when the model returns an unexpected format */}
@@ -741,6 +876,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#888",
     marginTop: 8,
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#EEE",
+  },
+  ratingText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#666",
+  },
+  ratingButton: {
+    padding: 6,
+  },
+  ratingThanks: {
+    fontSize: 13,
+    color: "#1B6B3A",
+  },
+  sourceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    backgroundColor: "#E6F4EA",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 10,
+  },
+  sourceBadgeText: {
+    color: "#1B6B3A",
+    fontSize: 12,
+    fontWeight: "600",
   },
   noticeBox: {
     backgroundColor: "#FFF6DD",

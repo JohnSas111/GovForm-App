@@ -1,7 +1,10 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
+import FormSummaryChip from "@/components/form-summary-sheet";
+import { recognizeForm } from "@/utils/form-recognition";
+import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
 import { createOccurrenceCounter } from "@/utils/phrase-match";
-import { saveRecentForm } from "@/utils/storage";
+import { saveRecentForm, updateRecentFormId } from "@/utils/storage";
 import { Ionicons } from "@expo/vector-icons";
 import TextRecognition from "@react-native-ml-kit/text-recognition";
 import * as FileSystem from "expo-file-system/legacy";
@@ -67,6 +70,8 @@ export default function CameraOCRScreen() {
   // Guards so the scanner is opened exactly once per request:
   // - hasAutoLaunchedRef: the automatic launch when this screen first appears
   // - scannerBusyRef: blocks a second launch while one is already in progress
+  // The saved copy of this scan, so a form the user picks can be saved with it.
+  const savedRecentIdRef = useRef<string | null>(null);
   const hasAutoLaunchedRef = useRef(false);
   const scannerBusyRef = useRef(false);
 
@@ -155,6 +160,8 @@ export default function CameraOCRScreen() {
   };
 
   const processImage = async (uri: string) => {
+    const startedAt = Date.now(); // research mode: time from photo to word boxes
+    savedRecentIdRef.current = null;
     try {
       setIsProcessing(true);
       setLoadingMessage("Optimizing image...");
@@ -177,6 +184,13 @@ export default function CameraOCRScreen() {
       const blurScore = await ExpoBlurDetector.getBlurScore(manipResult.uri);
 
       if (blurScore < 1000.0) {
+        logEvent({
+          event: "scan_rejected",
+          source: "blur",
+          ms: Date.now() - startedAt,
+          value: String(Math.round(blurScore)),
+          detail: "camera",
+        });
         Alert.alert(
           "Image Blurry",
           "The image is too blurry. Please hold steady and try again.",
@@ -277,13 +291,33 @@ export default function CameraOCRScreen() {
       }
 
       setBoundingBoxes(data);
+      logEvent({
+        event: "scan",
+        source: ocrSettings.mode === "desktop" ? "desktop" : "mlkit",
+        ms: Date.now() - startedAt,
+        value: String(data.length),
+        detail: "camera",
+      });
 
       // Save to recents in the background
-      saveRecentForm(manipResult.uri, data).catch((err) =>
-        console.log("Failed to save to recents", err),
-      );
+      // ...together with the supported form it was recognized as, when the app is sure.
+      const recognition = recognizeForm(data);
+      saveRecentForm(
+        manipResult.uri,
+        data,
+        recognition.status === "confident" ? recognition.formId : null,
+      )
+        .then((record) => {
+          savedRecentIdRef.current = record?.id ?? null;
+        })
+        .catch((err) => console.log("Failed to save to recents", err));
     } catch (error) {
       console.error("ML Kit OCR Processing Error:", error);
+      logEvent({
+        event: "scan_error",
+        ms: Date.now() - startedAt,
+        detail: "camera",
+      });
       Alert.alert(
         "Processing Error",
         "Could not run text recognition locally. Details: " +
@@ -410,6 +444,18 @@ export default function CameraOCRScreen() {
             </TouchableOpacity>
           </SafeAreaView>
 
+          {/* Which supported form this is (tap for its summary) */}
+          <SafeAreaView pointerEvents="box-none" style={styles.formChipArea}>
+            <FormSummaryChip
+              boxes={boundingBoxes}
+              source="camera"
+              onFormChange={(formId) => {
+                if (savedRecentIdRef.current)
+                  updateRecentFormId(savedRecentIdRef.current, formId);
+              }}
+            />
+          </SafeAreaView>
+
           {/* Active Word AI Dictionary Modal */}
           <AiDictionaryModal
             visible={selectedWord !== null}
@@ -480,6 +526,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 204, 0, 0.45)",
     borderColor: "#FFCC00",
     borderWidth: 2,
+  },
+  formChipArea: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 62,
+    paddingHorizontal: 16,
+    zIndex: 9,
   },
   overlayHeader: {
     position: "absolute",
