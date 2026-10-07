@@ -1,5 +1,6 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
 import FormSummaryChip from "@/components/form-summary-sheet";
+import { HowToUseButton } from "@/components/how-to-use-sheet";
 import { useLocalization } from "@/context/LocalizationContext";
 import {
   getRecentFormById,
@@ -132,6 +133,11 @@ export default function FormDetailsScreen() {
         />
       </View>
 
+      {/* How to use the results (tap a word, summary) */}
+      <View style={styles.howToRow}>
+        <HowToUseButton section="results" />
+      </View>
+
       <FlatList
         data={form.words}
         keyExtractor={(item, index) => {
@@ -168,6 +174,10 @@ export default function FormDetailsScreen() {
 
 const styles = StyleSheet.create({
   formChipRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  howToRow: {
     paddingHorizontal: 20,
     paddingBottom: 8,
   },

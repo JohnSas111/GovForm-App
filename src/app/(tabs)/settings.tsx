@@ -1,3 +1,4 @@
+import { HowToUseButton } from "@/components/how-to-use-sheet";
 import { LanguageKey } from "@/constants/translations";
 import { useLocalization } from "@/context/LocalizationContext";
 import {
@@ -143,6 +144,12 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={[styles.card, { paddingHorizontal: 0 }]}>
+            <HowToUseButton variant="row" />
           </View>
         </View>
 

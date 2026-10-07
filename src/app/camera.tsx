@@ -1,10 +1,12 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
 import FormSummaryChip from "@/components/form-summary-sheet";
+import { HowToUseButton } from "@/components/how-to-use-sheet";
 import { recognizeForm } from "@/utils/form-recognition";
+import { buildBoxesFromMlKit } from "@/utils/line-context";
 import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
-import { createOccurrenceCounter } from "@/utils/phrase-match";
 import { saveRecentForm, updateRecentFormId } from "@/utils/storage";
+import { clampPan, fitSize, MAX_ZOOM } from "@/utils/zoom-bounds";
 import { Ionicons } from "@expo/vector-icons";
 import TextRecognition from "@react-native-ml-kit/text-recognition";
 import * as FileSystem from "expo-file-system/legacy";
@@ -100,31 +102,77 @@ export default function CameraOCRScreen() {
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  // Size of the picture on screen and of the viewing area, used to stop the
+  // form from being dragged out of its box (see utils/zoom-bounds.ts).
+  const boundW = useSharedValue(0);
+  const boundH = useSharedValue(0);
+  const viewW = useSharedValue(0);
+  const viewH = useSharedValue(0);
+
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      scale.value = Math.max(1, savedScale.value * e.scale);
+      scale.value = Math.min(MAX_ZOOM, Math.max(1, savedScale.value * e.scale));
+      // Zooming out can leave the picture off-centre: pull it back inside.
+      translateX.value = clampPan(
+        translateX.value,
+        scale.value,
+        boundW.value,
+        viewW.value,
+      );
+      translateY.value = clampPan(
+        translateY.value,
+        scale.value,
+        boundH.value,
+        viewH.value,
+      );
     })
     .onEnd(() => {
       savedScale.value = scale.value;
       if (scale.value <= 1) {
         translateX.value = 0;
         translateY.value = 0;
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
       }
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
     });
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (scale.value > 1) {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
+        translateX.value = clampPan(
+          savedTranslateX.value + e.translationX,
+          scale.value,
+          boundW.value,
+          viewW.value,
+        );
+        translateY.value = clampPan(
+          savedTranslateY.value + e.translationY,
+          scale.value,
+          boundH.value,
+          viewH.value,
+        );
       }
     })
     .onEnd(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
+
+  // Tell the gestures how big the picture and the viewing area are.
+  useEffect(() => {
+    if (!capturedImage || containerSize.width <= 0 || containerSize.height <= 0)
+      return;
+    const fit = fitSize(
+      capturedImage.width,
+      capturedImage.height,
+      containerSize.width,
+      containerSize.height,
+    );
+    boundW.value = fit.width;
+    boundH.value = fit.height;
+    viewW.value = containerSize.width;
+    viewH.value = containerSize.height;
+  }, [capturedImage, containerSize]);
 
   const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
 
@@ -235,59 +283,9 @@ export default function CameraOCRScreen() {
         // Skip Python Server! Process locally with Google ML Kit.
         const result = await TextRecognition.recognize(manipResult.uri);
 
-        result.blocks.forEach((block: any) => {
-          // Create context sentence by concatenating all lines in the block
-          const blockSentence = block.lines
-            ? block.lines.map((l: any) => l.text).join(" ")
-            : block.text;
-
-          if (block.lines) {
-            block.lines.forEach((line: any) => {
-              if (line.elements) {
-                // Remember which line each word is on, and whether it is the 1st, 2nd...
-                // time that word appears on the line, so "Date" in "Date of Birth" can be
-                // understood as part of that whole phrase.
-                const nextOccurrence = createOccurrenceCounter();
-                line.elements.forEach((element: any) => {
-                  data.push({
-                    text: element.text,
-                    sentence: blockSentence, // Keep block context for the dictionary LLM
-                    line: line.text,
-                    occurrence: nextOccurrence(element.text),
-                    x: element.frame?.left || 0,
-                    y: element.frame?.top || 0,
-                    width: element.frame?.width || 0,
-                    height: element.frame?.height || 0,
-                  });
-                });
-              } else {
-                // Fallback to line level if elements are missing
-                data.push({
-                  text: line.text,
-                  sentence: blockSentence,
-                  line: line.text,
-                  occurrence: 0,
-                  x: line.frame?.left || 0,
-                  y: line.frame?.top || 0,
-                  width: line.frame?.width || 0,
-                  height: line.frame?.height || 0,
-                });
-              }
-            });
-          } else {
-            // Fallback to block level if lines are missing
-            data.push({
-              text: block.text,
-              sentence: blockSentence,
-              line: block.text,
-              occurrence: 0,
-              x: block.frame?.left || 0,
-              y: block.frame?.top || 0,
-              width: block.frame?.width || 0,
-              height: block.frame?.height || 0,
-            });
-          }
-        });
+        // Words, the fields they belong to, and phrases that wrap onto the
+        // next line ("DATE OF" / "BIRTH") are worked out from their positions.
+        data.push(...buildBoxesFromMlKit(result.blocks));
       }
 
       setBoundingBoxes(data);
@@ -454,6 +452,9 @@ export default function CameraOCRScreen() {
                   updateRecentFormId(savedRecentIdRef.current, formId);
               }}
             />
+            <View style={styles.howToRow}>
+              <HowToUseButton section="results" />
+            </View>
           </SafeAreaView>
 
           {/* Active Word AI Dictionary Modal */}
@@ -510,6 +511,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
     backgroundColor: "#000",
+    overflow: "hidden",
   },
   fullImage: {
     width: "100%",
@@ -526,6 +528,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 204, 0, 0.45)",
     borderColor: "#FFCC00",
     borderWidth: 2,
+  },
+  howToRow: {
+    marginTop: 8,
   },
   formChipArea: {
     position: "absolute",

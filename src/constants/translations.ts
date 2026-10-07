@@ -56,7 +56,37 @@ export type TranslationKey =
   | "form_label_submit"
   | "form_label_reminder"
   | "form_last_checked"
-  | "research_show_drafts";
+  | "research_show_drafts"
+  | "how_btn_home"
+  | "how_btn_results"
+  | "how_title"
+  | "how_intro"
+  | "how_tab_home"
+  | "how_tab_results"
+  | "how_close"
+  | "how_home_1_title"
+  | "how_home_1_body"
+  | "how_home_2_title"
+  | "how_home_2_body"
+  | "how_home_3_title"
+  | "how_home_3_body"
+  | "how_home_4_title"
+  | "how_home_4_body"
+  | "how_res_1_title"
+  | "how_res_1_body"
+  | "how_res_2_title"
+  | "how_res_2_body"
+  | "how_res_3_title"
+  | "how_res_3_body"
+  | "how_res_4_title"
+  | "how_res_4_body"
+  | "how_res_5_title"
+  | "how_res_5_body"
+  | "how_res_6_title"
+  | "how_res_6_body"
+  | "how_res_note"
+  | "dict_expand"
+  | "dict_collapse";
 
 export const translations: Record<
   LanguageKey,
@@ -131,6 +161,46 @@ export const translations: Record<
     form_label_reminder: "Reminder",
     form_last_checked: "Last checked",
     research_show_drafts: "Show draft form summaries",
+    how_btn_home: "How to use this app",
+    how_btn_results: "Steps: How to use",
+    how_title: "How to use GovForm AI",
+    how_intro: "Simple steps to scan a form and understand it.",
+    how_tab_home: "Before scanning",
+    how_tab_results: "After scanning",
+    how_close: "Got it",
+    how_home_1_title: "Take or choose a photo",
+    how_home_1_body:
+      "Tap “Take a Picture of the form” to use your camera, or “Choose Existing Photo” to pick an image from your gallery.",
+    how_home_2_title: "Make the photo clear",
+    how_home_2_body:
+      "Put the form on a flat surface with good light. Keep all the text inside the picture and avoid blur and shadows.",
+    how_home_3_title: "Wait for the scan",
+    how_home_3_body:
+      "The app reads the text on the form. This can take a few seconds. Then the words are highlighted on your form.",
+    how_home_4_title: "Find your old scans",
+    how_home_4_body:
+      "Open the “Recents” tab to see forms you scanned before and open them again.",
+    how_res_1_title: "Tap a highlighted word",
+    how_res_1_body:
+      "Every word the app found is highlighted on the form. Tap one to see its meaning, an example sentence and similar words.",
+    how_res_2_title: "Get a simpler sentence",
+    how_res_2_body:
+      "In the word window, tap “Explain this sentence” to get an easier version of the whole sentence.",
+    how_res_3_title: "Listen to it",
+    how_res_3_body: "Tap the speaker button to hear the meaning read out loud.",
+    how_res_4_title: "See what the form is for",
+    how_res_4_body:
+      "If the app knows the form, tap the blue “About this form” button. It shows what the form is for, who uses it, what to prepare and where to submit it.",
+    how_res_5_title: "Not sure which form?",
+    how_res_5_body:
+      "If you see “Which form is this?”, tap it and choose your form from the list.",
+    how_res_6_title: "Zoom in on small text",
+    how_res_6_body:
+      "On a new scan, pinch with two fingers to zoom in. Drag to move around the form.",
+    how_res_note:
+      "The “About this form” button only shows for forms the app supports. For any other form you can still tap the highlighted words.",
+    dict_expand: "Expand",
+    dict_collapse: "Collapse",
   },
   Tagalog: {
     app_title: "GovForm AI",
@@ -203,6 +273,46 @@ export const translations: Record<
     form_label_reminder: "Paalala",
     form_last_checked: "Huling na-check",
     research_show_drafts: "Ipakita ang mga draft na summary ng form",
+    how_btn_home: "Paano gamitin ang app",
+    how_btn_results: "Mga hakbang",
+    how_title: "Paano gamitin ang GovForm AI",
+    how_intro: "Mga simpleng hakbang para i-scan ang form at maintindihan ito.",
+    how_tab_home: "Bago mag-scan",
+    how_tab_results: "Pagkatapos mag-scan",
+    how_close: "Sige, naintindihan ko",
+    how_home_1_title: "Kumuha o pumili ng larawan",
+    how_home_1_body:
+      "I-tap ang “Kunan ng Picture ang Form” para gamitin ang camera, o ang “Pumili sa Gallery” para pumili ng larawan sa gallery mo.",
+    how_home_2_title: "Gawing malinaw ang larawan",
+    how_home_2_body:
+      "Ilagay ang form sa patag na lugar na may magandang ilaw. Siguraduhing kasama ang lahat ng teksto sa larawan, at iwasan ang malabo o may anino.",
+    how_home_3_title: "Hintayin ang pag-scan",
+    how_home_3_body:
+      "Babasahin ng app ang teksto sa form. Maaaring abutin ito ng ilang segundo. Pagkatapos, magha-highlight ang mga salita sa form mo.",
+    how_home_4_title: "Hanapin ang mga dating scan",
+    how_home_4_body:
+      "Buksan ang tab na “Mga Nakaraan” para makita ang mga form na na-scan mo na at buksan itong muli.",
+    how_res_1_title: "I-tap ang naka-highlight na salita",
+    how_res_1_body:
+      "Naka-highlight sa form ang bawat salitang nahanap ng app. I-tap ang isa para makita ang kahulugan, halimbawang pangungusap at kahawig na mga salita.",
+    how_res_2_title: "Kumuha ng mas simpleng pangungusap",
+    how_res_2_body:
+      "Sa window ng salita, i-tap ang “Ipaliwanag ang pangungusap na ito” para makuha ang mas madaling bersyon ng buong pangungusap.",
+    how_res_3_title: "Pakinggan ito",
+    how_res_3_body: "I-tap ang speaker button para marinig ang kahulugan.",
+    how_res_4_title: "Alamin kung para saan ang form",
+    how_res_4_body:
+      "Kung kilala ng app ang form, i-tap ang asul na “Tungkol sa form na ito”. Makikita rito kung para saan ang form, sino ang gumagamit, ano ang ihahanda at saan ito ihahatid.",
+    how_res_5_title: "Hindi sigurado kung anong form?",
+    how_res_5_body:
+      "Kung makita mo ang “Anong form ito?”, i-tap ito at piliin ang form mo sa listahan.",
+    how_res_6_title: "I-zoom ang maliliit na teksto",
+    how_res_6_body:
+      "Sa bagong scan, gamitin ang dalawang daliri para mag-zoom in. I-drag para gumalaw sa form.",
+    how_res_note:
+      "Lumalabas lang ang “Tungkol sa form na ito” sa mga form na sinusuportahan ng app. Sa ibang form, maaari mo pa ring i-tap ang mga naka-highlight na salita.",
+    dict_expand: "Palakihin",
+    dict_collapse: "Paliitin",
   },
   Cebuano: {
     app_title: "GovForm AI",
@@ -275,5 +385,45 @@ export const translations: Record<
     form_label_reminder: "Paalala",
     form_last_checked: "Katapusang gi-check",
     research_show_drafts: "Ipakita ang mga draft nga summary sa form",
+    how_btn_home: "Unsaon paggamit sa app",
+    how_btn_results: "Mga lakang",
+    how_title: "Unsaon paggamit sa GovForm AI",
+    how_intro: "Yanong mga lakang aron i-scan ang form ug masabtan kini.",
+    how_tab_home: "Sa dili pa mag-scan",
+    how_tab_results: "Human mag-scan",
+    how_close: "Sige, nasabtan nako",
+    how_home_1_title: "Pagkuha o pagpili og litrato",
+    how_home_1_body:
+      "I-tap ang “Picturi ang Form” aron gamiton ang camera, o ang “Pangitag Litrato gikan sa Gallery” aron mopili og litrato sa imong gallery.",
+    how_home_2_title: "Himoang klaro ang litrato",
+    how_home_2_body:
+      "Ibutang ang form sa patag nga lugar nga hayag ang suga. Siguroha nga naa ang tanang teksto sa litrato, ug likayi ang labad o landong.",
+    how_home_3_title: "Hulata ang pag-scan",
+    how_home_3_body:
+      "Basahon sa app ang teksto sa form. Mahimong molungtad kini og pipila ka segundo. Dayon, ma-highlight ang mga pulong sa imong form.",
+    how_home_4_title: "Pangitaa ang daan nimong mga scan",
+    how_home_4_body:
+      "Ablihi ang tab nga “Mga Niagi” aron makita ang mga form nga na-scan na nimo ug abli kini pag-usab.",
+    how_res_1_title: "I-tap ang naka-highlight nga pulong",
+    how_res_1_body:
+      "Naka-highlight sa form ang matag pulong nga nakit-an sa app. I-tap ang usa aron makita ang kahulugan, pananglitan nga sentence ug susama nga mga pulong.",
+    how_res_2_title: "Pagkuha og mas simple nga sentence",
+    how_res_2_body:
+      "Sa bintana sa pulong, i-tap ang “Ipasabot kini nga sentence” aron makuha ang mas sayon nga bersyon sa tibuok sentence.",
+    how_res_3_title: "Paminawa kini",
+    how_res_3_body: "I-tap ang speaker button aron madungog ang kahulugan.",
+    how_res_4_title: "Tan-awa kung para saan ang form",
+    how_res_4_body:
+      "Kung kilala sa app ang form, i-tap ang asul nga “Mahitungod niini nga form”. Makita dinhi kung para saan ang form, kinsa ang mogamit, unsay andamon ug asa kini ihatag.",
+    how_res_5_title: "Dili sigurado kung unsang form?",
+    how_res_5_body:
+      "Kung makita nimo ang “Unsang form kini?”, i-tap kini ug pilia ang imong form sa lista.",
+    how_res_6_title: "I-zoom ang gagmay nga teksto",
+    how_res_6_body:
+      "Sa bag-ong scan, gamita ang duha ka tudlo aron mo-zoom in. I-drag aron mopalayo sa form.",
+    how_res_note:
+      "Makita lang ang “Mahitungod niini nga form” sa mga form nga gisuportahan sa app. Sa laing form, maka-tap gihapon ka sa mga naka-highlight nga pulong.",
+    dict_expand: "Padak-a",
+    dict_collapse: "Paliti",
   },
 };

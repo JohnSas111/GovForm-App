@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
@@ -93,6 +94,21 @@ export default function AiDictionaryModal({
   onClose,
 }: AiDictionaryModalProps) {
   const { language, t } = useLocalization();
+
+  // Window size: normal (about half the screen) or expanded (almost full).
+  // Drag the handle up/down, tap it, or use the Expand/Collapse button.
+  const [expanded, setExpanded] = useState(false);
+  const handlePan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderRelease: (_event, gesture) => {
+        if (gesture.dy < -30) setExpanded(true);
+        else if (gesture.dy > 30) setExpanded(false);
+        else if (Math.abs(gesture.dx) < 10 && Math.abs(gesture.dy) < 10)
+          setExpanded((value) => !value);
+      },
+    }),
+  ).current;
 
   const [isLlmLoading, setIsLlmLoading] = useState(false);
   const [llmResult, setLlmResult] = useState<LLMResponse | null>(null);
@@ -470,12 +486,40 @@ export default function AiDictionaryModal({
       onRequestClose={handleClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View
+          style={[styles.modalContent, expanded && styles.modalContentExpanded]}
+        >
+          <View {...handlePan.panHandlers} style={styles.handleArea}>
+            <View style={styles.handleBar} />
+          </View>
+
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>AI Dictionary</Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.expandButton}
+                onPress={() => setExpanded((value) => !value)}
+                accessibilityRole="button"
+                accessibilityLabel={t(
+                  expanded ? "dict_collapse" : "dict_expand",
+                )}
+              >
+                <Ionicons
+                  name={expanded ? "contract-outline" : "expand-outline"}
+                  size={16}
+                  color="#2182DE"
+                />
+                <Text style={styles.expandButtonText}>
+                  {t(expanded ? "dict_collapse" : "dict_expand")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {wordText && (
@@ -812,6 +856,43 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 4,
+  },
+  modalContentExpanded: {
+    height: "92%",
+    minHeight: "92%",
+    maxHeight: "92%",
+  },
+  handleArea: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    marginTop: -14,
+    paddingVertical: 12,
+  },
+  handleBar: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#D0D0D0",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  expandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#2182DE",
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  expandButtonText: {
+    color: "#2182DE",
+    fontSize: 12,
+    fontWeight: "600",
   },
   selectedWordRow: {
     flexDirection: "row",

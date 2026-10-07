@@ -1,11 +1,16 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
 import FormSummaryChip from "@/components/form-summary-sheet";
+import {
+  HowToUseButton,
+  HowToUseFirstLaunch,
+} from "@/components/how-to-use-sheet";
 import { useLocalization } from "@/context/LocalizationContext";
 import { recognizeForm } from "@/utils/form-recognition";
+import { buildBoxesFromMlKit } from "@/utils/line-context";
 import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
-import { createOccurrenceCounter } from "@/utils/phrase-match";
 import { saveRecentForm, updateRecentFormId } from "@/utils/storage";
+import { clampPan, fitSize, MAX_ZOOM } from "@/utils/zoom-bounds";
 import { Ionicons } from "@expo/vector-icons";
 import TextRecognition from "@react-native-ml-kit/text-recognition";
 import * as FileSystem from "expo-file-system/legacy";
@@ -201,31 +206,77 @@ export default function HomeScreen() {
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
 
+  // Size of the picture on screen and of the viewing area, used to stop the
+  // form from being dragged out of its box (see utils/zoom-bounds.ts).
+  const boundW = useSharedValue(0);
+  const boundH = useSharedValue(0);
+  const viewW = useSharedValue(0);
+  const viewH = useSharedValue(0);
+
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      scale.value = Math.max(1, savedScale.value * e.scale);
+      scale.value = Math.min(MAX_ZOOM, Math.max(1, savedScale.value * e.scale));
+      // Zooming out can leave the picture off-centre: pull it back inside.
+      translateX.value = clampPan(
+        translateX.value,
+        scale.value,
+        boundW.value,
+        viewW.value,
+      );
+      translateY.value = clampPan(
+        translateY.value,
+        scale.value,
+        boundH.value,
+        viewH.value,
+      );
     })
     .onEnd(() => {
       savedScale.value = scale.value;
       if (scale.value <= 1) {
         translateX.value = 0;
         translateY.value = 0;
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
       }
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
     });
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (scale.value > 1) {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
+        translateX.value = clampPan(
+          savedTranslateX.value + e.translationX,
+          scale.value,
+          boundW.value,
+          viewW.value,
+        );
+        translateY.value = clampPan(
+          savedTranslateY.value + e.translationY,
+          scale.value,
+          boundH.value,
+          viewH.value,
+        );
       }
     })
     .onEnd(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
+
+  // Tell the gestures how big the picture and the viewing area are.
+  // The card has 20 of padding on every side, and the picture sits inside it.
+  useEffect(() => {
+    if (!image || cardLayout.width <= 0 || cardLayout.height <= 0) return;
+    const fit = fitSize(
+      image.width,
+      image.height,
+      cardLayout.width - 40,
+      cardLayout.height - 40,
+    );
+    boundW.value = fit.width;
+    boundH.value = fit.height;
+    viewW.value = cardLayout.width;
+    viewH.value = cardLayout.height;
+  }, [image, cardLayout]);
 
   const composedGesture = Gesture.Simultaneous(pinchGesture, panGesture);
 
@@ -302,58 +353,9 @@ export default function HomeScreen() {
         // Process locally with Google ML Kit
         const result = await TextRecognition.recognize(uri);
 
-        result.blocks.forEach((block: any) => {
-          // Create context sentence by concatenating all lines in the block
-          const blockSentence = block.lines
-            ? block.lines.map((l: any) => l.text).join(" ")
-            : block.text;
-
-          if (block.lines) {
-            block.lines.forEach((line: any) => {
-              if (line.elements) {
-                // Remember which line each word is on, and whether it is the 1st, 2nd...
-                // time that word appears on the line (see camera.tsx).
-                const nextOccurrence = createOccurrenceCounter();
-                line.elements.forEach((element: any) => {
-                  data.push({
-                    text: element.text,
-                    sentence: blockSentence, // Keep block context for the dictionary LLM
-                    line: line.text,
-                    occurrence: nextOccurrence(element.text),
-                    x: element.frame?.left || 0,
-                    y: element.frame?.top || 0,
-                    width: element.frame?.width || 0,
-                    height: element.frame?.height || 0,
-                  });
-                });
-              } else {
-                // Fallback to line level
-                data.push({
-                  text: line.text,
-                  sentence: blockSentence,
-                  line: line.text,
-                  occurrence: 0,
-                  x: line.frame?.left || 0,
-                  y: line.frame?.top || 0,
-                  width: line.frame?.width || 0,
-                  height: line.frame?.height || 0,
-                });
-              }
-            });
-          } else {
-            // Fallback to block level
-            data.push({
-              text: block.text,
-              sentence: blockSentence,
-              line: block.text,
-              occurrence: 0,
-              x: block.frame?.left || 0,
-              y: block.frame?.top || 0,
-              width: block.frame?.width || 0,
-              height: block.frame?.height || 0,
-            });
-          }
-        });
+        // Words, the fields they belong to, and phrases that wrap onto the
+        // next line ("DATE OF" / "BIRTH") are worked out from their positions.
+        data.push(...buildBoxesFromMlKit(result.blocks));
       }
 
       console.log(`✅ Received ${data.length} bounding boxes from OCR!`);
@@ -487,6 +489,11 @@ export default function HomeScreen() {
           />
         </View>
 
+        {/* How to use the results (tap a word, summary, zoom) */}
+        <View style={styles.howToRow}>
+          <HowToUseButton section="results" />
+        </View>
+
         <View style={styles.previewCardContainer}>
           <View style={styles.darkCard} onLayout={handleCardLayout}>
             <GestureDetector gesture={composedGesture}>
@@ -576,10 +583,15 @@ export default function HomeScreen() {
   // 3. Default Home State (Take / Pick photo buttons)
   return (
     <SafeAreaView style={styles.container}>
+      {/* Shows the guide once, the first time the app opens */}
+      <HowToUseFirstLaunch />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{t("app_title")}</Text>
           <Text style={styles.subtitle}>{t("subtitle")}</Text>
+          <View style={styles.howToHome}>
+            <HowToUseButton section="home" />
+          </View>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -602,6 +614,13 @@ const styles = StyleSheet.create({
   formChipRow: {
     paddingHorizontal: 20,
     paddingBottom: 8,
+  },
+  howToRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  howToHome: {
+    marginTop: 16,
   },
   container: {
     flex: 1,
@@ -694,6 +713,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#2C2D30",
     borderRadius: 24,
+    overflow: "hidden",
     padding: 20,
     justifyContent: "center",
     alignItems: "center",
