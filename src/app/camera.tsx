@@ -1,7 +1,17 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
 import FormSummaryChip from "@/components/form-summary-sheet";
 import { HowToUseButton } from "@/components/how-to-use-sheet";
+import LargeTextView, {
+  ViewMode,
+  ViewModeSwitch,
+} from "@/components/large-text-view";
 import { recognizeForm } from "@/utils/form-recognition";
+import {
+  getLargeTextSize,
+  getOpenInLargeText,
+  LargeTextSize,
+  saveLargeTextSize,
+} from "@/utils/large-text-settings";
 import { buildBoxesFromMlKit } from "@/utils/line-context";
 import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
@@ -38,6 +48,7 @@ export interface BoundingBoxItem {
   sentence?: string; // the whole text block around the word
   line?: string; // the single line of text the word is on
   occurrence?: number; // 0 = first time this word appears on its line, 1 = second, ...
+  group?: number; // same number = same field or phrase (used by the Large text view)
   x: number; // Original image pixel X
   y: number; // Original image pixel Y
   width: number; // Original image pixel width
@@ -59,6 +70,23 @@ export default function CameraOCRScreen() {
   const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(
     null,
   );
+
+  // Photo view (highlights on the picture) or Large text view (big words).
+  const [viewMode, setViewMode] = useState<ViewMode>("photo");
+  const [textSize, setTextSize] = useState<LargeTextSize>("medium");
+
+  // A new scan opens in Large text only if the person turned that on in Settings.
+  const applyLargeTextPreference = async () => {
+    setViewMode((await getOpenInLargeText()) ? "text" : "photo");
+    setTextSize(await getLargeTextSize());
+  };
+
+  const handleChangeTextSize = (size: LargeTextSize) => {
+    setTextSize(size);
+    saveLargeTextSize(size);
+  };
+  // Height of the buttons at the top, so the Large text panel starts below them.
+  const [topAreaHeight, setTopAreaHeight] = useState(240);
 
   // Layout container dimensions for accurate coordinate scaling
   const [containerSize, setContainerSize] = useState<{
@@ -289,6 +317,7 @@ export default function CameraOCRScreen() {
       }
 
       setBoundingBoxes(data);
+      applyLargeTextPreference();
       logEvent({
         event: "scan",
         source: ocrSettings.mode === "desktop" ? "desktop" : "mlkit",
@@ -431,6 +460,21 @@ export default function CameraOCRScreen() {
             </Animated.View>
           </GestureDetector>
 
+          {/* Large text view: covers the photo, under the buttons at the top */}
+          {viewMode === "text" && (
+            <View
+              style={[styles.largeTextPanel, { paddingTop: topAreaHeight }]}
+            >
+              <LargeTextView
+                boxes={boundingBoxes}
+                selectedWord={selectedWord}
+                onSelectWord={setSelectedWord}
+                size={textSize}
+                onChangeSize={handleChangeTextSize}
+              />
+            </View>
+          )}
+
           {/* Header Controls overlay */}
           <SafeAreaView style={styles.overlayHeader}>
             <TouchableOpacity style={styles.iconButton} onPress={goBack}>
@@ -443,7 +487,13 @@ export default function CameraOCRScreen() {
           </SafeAreaView>
 
           {/* Which supported form this is (tap for its summary) */}
-          <SafeAreaView pointerEvents="box-none" style={styles.formChipArea}>
+          <SafeAreaView
+            pointerEvents="box-none"
+            style={styles.formChipArea}
+            onLayout={(event) =>
+              setTopAreaHeight(event.nativeEvent.layout.height)
+            }
+          >
             <FormSummaryChip
               boxes={boundingBoxes}
               source="camera"
@@ -454,6 +504,9 @@ export default function CameraOCRScreen() {
             />
             <View style={styles.howToRow}>
               <HowToUseButton section="results" />
+            </View>
+            <View style={styles.viewModeRow}>
+              <ViewModeSwitch mode={viewMode} onChange={setViewMode} />
             </View>
           </SafeAreaView>
 
@@ -531,6 +584,16 @@ const styles = StyleSheet.create({
   },
   howToRow: {
     marginTop: 8,
+  },
+  viewModeRow: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  largeTextPanel: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "#1E1F22",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   formChipArea: {
     position: "absolute",

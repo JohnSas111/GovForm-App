@@ -2,6 +2,10 @@ import { HowToUseButton } from "@/components/how-to-use-sheet";
 import { LanguageKey } from "@/constants/translations";
 import { useLocalization } from "@/context/LocalizationContext";
 import {
+  getOpenInLargeText,
+  setOpenInLargeText,
+} from "@/utils/large-text-settings";
+import {
   clearEvents,
   getEventsCsv,
   getResearchSummary,
@@ -40,6 +44,16 @@ export default function SettingsScreen() {
   const { language, setLanguage, t } = useLocalization();
 
   const [ocrMode, setOcrMode] = useState<OcrMode>("native");
+  const [largeTextOn, setLargeTextOn] = useState(false);
+
+  useEffect(() => {
+    getOpenInLargeText().then(setLargeTextOn);
+  }, []);
+
+  const handleLargeTextToggle = async (value: boolean) => {
+    setLargeTextOn(value);
+    await setOpenInLargeText(value);
+  };
   const [desktopIp, setDesktopIp] = useState("192.168.137.1");
 
   useEffect(() => {
@@ -150,6 +164,19 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <View style={[styles.card, { paddingHorizontal: 0 }]}>
             <HowToUseButton variant="row" />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("lt_setting_title")}</Text>
+          <View style={styles.card}>
+            <View style={styles.researchRow}>
+              <Text style={styles.researchDesc}>{t("lt_setting_desc")}</Text>
+              <Switch
+                value={largeTextOn}
+                onValueChange={handleLargeTextToggle}
+              />
+            </View>
           </View>
         </View>
 

@@ -4,8 +4,18 @@ import {
   HowToUseButton,
   HowToUseFirstLaunch,
 } from "@/components/how-to-use-sheet";
+import LargeTextView, {
+  ViewMode,
+  ViewModeSwitch,
+} from "@/components/large-text-view";
 import { useLocalization } from "@/context/LocalizationContext";
 import { recognizeForm } from "@/utils/form-recognition";
+import {
+  getLargeTextSize,
+  getOpenInLargeText,
+  LargeTextSize,
+  saveLargeTextSize,
+} from "@/utils/large-text-settings";
 import { buildBoxesFromMlKit } from "@/utils/line-context";
 import { logEvent } from "@/utils/metrics";
 import { getOcrSettings } from "@/utils/ocr-settings";
@@ -42,6 +52,7 @@ export interface BoundingBoxItem {
   sentence?: string; // the whole text block around the word
   line?: string; // the single line of text the word is on
   occurrence?: number; // 0 = first time this word appears on its line, 1 = second, ...
+  group?: number; // same number = same field or phrase (used by the Large text view)
   x: number;
   y: number;
   width: number;
@@ -188,6 +199,21 @@ export default function HomeScreen() {
   const [selectedWord, setSelectedWord] = useState<BoundingBoxItem | null>(
     null,
   );
+
+  // Photo view (highlights on the picture) or Large text view (big words).
+  const [viewMode, setViewMode] = useState<ViewMode>("photo");
+  const [textSize, setTextSize] = useState<LargeTextSize>("medium");
+
+  // A new scan opens in Large text only if the person turned that on in Settings.
+  const applyLargeTextPreference = async () => {
+    setViewMode((await getOpenInLargeText()) ? "text" : "photo");
+    setTextSize(await getLargeTextSize());
+  };
+
+  const handleChangeTextSize = (size: LargeTextSize) => {
+    setTextSize(size);
+    saveLargeTextSize(size);
+  };
 
   // Card Layout Dimensions for scaling coordinates
   const [cardLayout, setCardLayout] = useState<{
@@ -360,6 +386,7 @@ export default function HomeScreen() {
 
       console.log(`✅ Received ${data.length} bounding boxes from OCR!`);
       setBoundingBoxes(data);
+      applyLargeTextPreference();
       logEvent({
         event: "scan",
         source: ocrSettings.mode === "desktop" ? "desktop" : "mlkit",
@@ -494,78 +521,95 @@ export default function HomeScreen() {
           <HowToUseButton section="results" />
         </View>
 
-        <View style={styles.previewCardContainer}>
-          <View style={styles.darkCard} onLayout={handleCardLayout}>
-            <GestureDetector gesture={composedGesture}>
-              <Animated.View
-                style={[
-                  StyleSheet.absoluteFill,
-                  animatedStyle,
-                  {
-                    padding: 20,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: image.uri }}
-                  style={styles.documentImage}
-                  resizeMode="contain"
-                />
-
-                {/* Google Lens Interactive Bounding Box Overlays */}
-                {cardLayout.width > 0 &&
-                  cardLayout.height > 0 &&
-                  (() => {
-                    const containerW = cardLayout.width - 40;
-                    const containerH = cardLayout.height - 40;
-                    const imgAspect = image.width / image.height;
-                    const containerAspect = containerW / containerH;
-
-                    let displayedW = containerW;
-                    let displayedH = containerH;
-                    let offsetX = 0; // relative to inner animated view which has padding
-                    let offsetY = 0;
-
-                    if (containerAspect > imgAspect) {
-                      displayedW = containerH * imgAspect;
-                      offsetX = (containerW - displayedW) / 2;
-                    } else {
-                      displayedH = containerW / imgAspect;
-                      offsetY = (containerH - displayedH) / 2;
-                    }
-
-                    const scaleVal = displayedW / image.width;
-
-                    return boundingBoxes.map((item, index) => {
-                      const boxStyle = {
-                        left: offsetX + item.x * scaleVal + 20, // add padding back
-                        top: offsetY + item.y * scaleVal + 20,
-                        width: item.width * scaleVal,
-                        height: item.height * scaleVal,
-                      };
-
-                      const isSelected = selectedWord === item;
-
-                      return (
-                        <TouchableOpacity
-                          key={index}
-                          activeOpacity={0.7}
-                          style={[
-                            styles.boundingBox,
-                            boxStyle,
-                            isSelected && styles.selectedBoundingBox,
-                          ]}
-                          onPress={() => setSelectedWord(item)}
-                        />
-                      );
-                    });
-                  })()}
-              </Animated.View>
-            </GestureDetector>
-          </View>
+        {/* Photo | Large text */}
+        <View style={styles.viewModeRow}>
+          <ViewModeSwitch mode={viewMode} onChange={setViewMode} />
         </View>
+
+        {viewMode === "text" ? (
+          <View style={styles.previewCardContainer}>
+            <LargeTextView
+              boxes={boundingBoxes}
+              selectedWord={selectedWord}
+              onSelectWord={setSelectedWord}
+              size={textSize}
+              onChangeSize={handleChangeTextSize}
+            />
+          </View>
+        ) : (
+          <View style={styles.previewCardContainer}>
+            <View style={styles.darkCard} onLayout={handleCardLayout}>
+              <GestureDetector gesture={composedGesture}>
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    animatedStyle,
+                    {
+                      padding: 20,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: image.uri }}
+                    style={styles.documentImage}
+                    resizeMode="contain"
+                  />
+
+                  {/* Google Lens Interactive Bounding Box Overlays */}
+                  {cardLayout.width > 0 &&
+                    cardLayout.height > 0 &&
+                    (() => {
+                      const containerW = cardLayout.width - 40;
+                      const containerH = cardLayout.height - 40;
+                      const imgAspect = image.width / image.height;
+                      const containerAspect = containerW / containerH;
+
+                      let displayedW = containerW;
+                      let displayedH = containerH;
+                      let offsetX = 0; // relative to inner animated view which has padding
+                      let offsetY = 0;
+
+                      if (containerAspect > imgAspect) {
+                        displayedW = containerH * imgAspect;
+                        offsetX = (containerW - displayedW) / 2;
+                      } else {
+                        displayedH = containerW / imgAspect;
+                        offsetY = (containerH - displayedH) / 2;
+                      }
+
+                      const scaleVal = displayedW / image.width;
+
+                      return boundingBoxes.map((item, index) => {
+                        const boxStyle = {
+                          left: offsetX + item.x * scaleVal + 20, // add padding back
+                          top: offsetY + item.y * scaleVal + 20,
+                          width: item.width * scaleVal,
+                          height: item.height * scaleVal,
+                        };
+
+                        const isSelected = selectedWord === item;
+
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            activeOpacity={0.7}
+                            style={[
+                              styles.boundingBox,
+                              boxStyle,
+                              isSelected && styles.selectedBoundingBox,
+                            ]}
+                            onPress={() => setSelectedWord(item)}
+                          />
+                        );
+                      });
+                    })()}
+                </Animated.View>
+              </GestureDetector>
+            </View>
+          </View>
+        )}
 
         {/* Selected Word AI Dictionary Modal */}
         <AiDictionaryModal
@@ -618,6 +662,10 @@ const styles = StyleSheet.create({
   howToRow: {
     paddingHorizontal: 20,
     paddingBottom: 8,
+  },
+  viewModeRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
   },
   howToHome: {
     marginTop: 16,

@@ -86,7 +86,17 @@ export type TranslationKey =
   | "how_res_6_body"
   | "how_res_note"
   | "dict_expand"
-  | "dict_collapse";
+  | "dict_collapse"
+  | "lt_mode_photo"
+  | "lt_mode_text"
+  | "lt_size"
+  | "lt_size_small"
+  | "lt_size_medium"
+  | "lt_size_large"
+  | "lt_hint"
+  | "lt_empty"
+  | "lt_setting_title"
+  | "lt_setting_desc";
 
 export const translations: Record<
   LanguageKey,
@@ -201,6 +211,17 @@ export const translations: Record<
       "The “About this form” button only shows for forms the app supports. For any other form you can still tap the highlighted words.",
     dict_expand: "Expand",
     dict_collapse: "Collapse",
+    lt_mode_photo: "Photo",
+    lt_mode_text: "Large text",
+    lt_size: "Text size",
+    lt_size_small: "Small",
+    lt_size_medium: "Medium",
+    lt_size_large: "Large",
+    lt_hint: "Tap any word to see what it means.",
+    lt_empty: "No words were found in this scan.",
+    lt_setting_title: "Open scans in Large text",
+    lt_setting_desc:
+      "Show the words in big letters first. You can switch back to the photo any time.",
   },
   Tagalog: {
     app_title: "GovForm AI",
@@ -313,6 +334,17 @@ export const translations: Record<
       "Lumalabas lang ang “Tungkol sa form na ito” sa mga form na sinusuportahan ng app. Sa ibang form, maaari mo pa ring i-tap ang mga naka-highlight na salita.",
     dict_expand: "Palakihin",
     dict_collapse: "Paliitin",
+    lt_mode_photo: "Larawan",
+    lt_mode_text: "Malaking letra",
+    lt_size: "Laki ng letra",
+    lt_size_small: "Maliit",
+    lt_size_medium: "Katamtaman",
+    lt_size_large: "Malaki",
+    lt_hint: "I-tap ang kahit anong salita para malaman ang kahulugan.",
+    lt_empty: "Walang nahanap na salita sa scan na ito.",
+    lt_setting_title: "Buksan ang mga scan sa Malaking letra",
+    lt_setting_desc:
+      "Ipakita muna ang mga salita sa malalaking letra. Maaari kang bumalik sa larawan anumang oras.",
   },
   Cebuano: {
     app_title: "GovForm AI",
@@ -425,5 +457,16 @@ export const translations: Record<
       "Makita lang ang “Mahitungod niini nga form” sa mga form nga gisuportahan sa app. Sa laing form, maka-tap gihapon ka sa mga naka-highlight nga pulong.",
     dict_expand: "Padak-a",
     dict_collapse: "Paliti",
+    lt_mode_photo: "Litrato",
+    lt_mode_text: "Dako nga letra",
+    lt_size: "Gidak-on sa letra",
+    lt_size_small: "Gamay",
+    lt_size_medium: "Tunga-tunga",
+    lt_size_large: "Dako",
+    lt_hint: "I-tap ang bisan unsang pulong aron mahibaw-an ang kahulugan.",
+    lt_empty: "Walay nakitang pulong sa scan nga kini.",
+    lt_setting_title: "Ablihi ang mga scan sa Dako nga letra",
+    lt_setting_desc:
+      "Ipakita una ang mga pulong sa dagko nga letra. Makabalik ka sa litrato bisan kanus-a.",
   },
 };

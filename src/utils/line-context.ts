@@ -64,6 +64,9 @@ export interface WordBox {
   text: string;
   sentence: string;
   line: string;
+  // Words with the same group number belong to the same field or phrase
+  // ("DATE OF" + "BIRTH" share one), even if the OCR read them far apart.
+  group: number;
   occurrence: number;
   x: number;
   y: number;
@@ -259,9 +262,15 @@ export const buildBoxesFromMlKit = (blocks: any[]): WordBox[] => {
   });
 
   // One shared context (text, sentence, word counts) per group of pieces.
+  let nextGroupId = 0;
   const contextOf = new Map<
     Segment,
-    { line: string; sentence: string; occurrences: Map<any, number> }
+    {
+      id: number;
+      line: string;
+      sentence: string;
+      occurrences: Map<any, number>;
+    }
   >();
   segments
     .filter((s) => !s.hasPrev)
@@ -281,6 +290,7 @@ export const buildBoxesFromMlKit = (blocks: any[]): WordBox[] => {
         ),
       );
       const shared = {
+        id: nextGroupId++,
         line: lineText,
         // Pieces from different OCR blocks: the joined phrase itself is the
         // cleanest context ("DATE OF BIRTH"). Same block: keep the block text.
@@ -301,6 +311,7 @@ export const buildBoxesFromMlKit = (blocks: any[]): WordBox[] => {
           text: element.text,
           sentence: ctx.sentence,
           line: ctx.line,
+          group: ctx.id,
           occurrence: ctx.occurrences.get(element) ?? 0,
           x: element.frame?.left || 0,
           y: element.frame?.top || 0,
@@ -314,6 +325,7 @@ export const buildBoxesFromMlKit = (blocks: any[]): WordBox[] => {
         text: entry.line.text,
         sentence: entry.blockSentence,
         line: entry.line.text,
+        group: nextGroupId++,
         occurrence: 0,
         x: entry.line.frame?.left || 0,
         y: entry.line.frame?.top || 0,
@@ -326,6 +338,7 @@ export const buildBoxesFromMlKit = (blocks: any[]): WordBox[] => {
         text: entry.block.text,
         sentence: entry.blockSentence,
         line: entry.block.text,
+        group: nextGroupId++,
         occurrence: 0,
         x: entry.block.frame?.left || 0,
         y: entry.block.frame?.top || 0,
