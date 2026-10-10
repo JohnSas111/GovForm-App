@@ -1,7 +1,7 @@
 import AiDictionaryModal from "@/components/ai-dictionary-modal";
 import FormSummaryChip from "@/components/form-summary-sheet";
 import { HowToUseButton } from "@/components/how-to-use-sheet";
-import { useLocalization } from "@/context/LocalizationContext";
+import OfflineBanner from "@/components/offline-banner";
 import {
   getRecentFormById,
   HarvestedWord,
@@ -23,7 +23,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function FormDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { language } = useLocalization();
   const [form, setForm] = useState<RecentForm | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -103,6 +102,7 @@ export default function FormDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OfflineBanner />
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}

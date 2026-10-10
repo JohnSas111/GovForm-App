@@ -5,6 +5,8 @@ import LargeTextView, {
   ViewMode,
   ViewModeSwitch,
 } from "@/components/large-text-view";
+import { useLocalization } from "@/context/LocalizationContext";
+import { checkIsOffline } from "@/utils/connectivity";
 import { recognizeForm } from "@/utils/form-recognition";
 import {
   getLargeTextSize,
@@ -103,6 +105,7 @@ export default function CameraOCRScreen() {
   // The saved copy of this scan, so a form the user picks can be saved with it.
   const savedRecentIdRef = useRef<string | null>(null);
   const hasAutoLaunchedRef = useRef(false);
+  const { t } = useLocalization();
   const scannerBusyRef = useRef(false);
 
   // Leave this screen and go back to where the user came from.
@@ -214,6 +217,13 @@ export default function CameraOCRScreen() {
 
   const launchScanner = async () => {
     if (scannerBusyRef.current) return;
+    // Scanning needs internet: explain, then leave this screen.
+    if (await checkIsOffline()) {
+      Alert.alert(t("offline_title"), t("offline_scan_blocked"), [
+        { text: "OK", onPress: goBack },
+      ]);
+      return;
+    }
     scannerBusyRef.current = true;
     try {
       const { scannedImages } = await DocumentScanner.scanDocument({

@@ -1040,12 +1040,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 8,
   },
-  speakButton: {
-    marginLeft: 10,
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: "#EAF3FC",
-  },
   llmLoadingContainer: {
     alignItems: "center",
     justifyContent: "center",

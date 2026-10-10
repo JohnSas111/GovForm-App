@@ -80,11 +80,6 @@ export const logEvent = (event: Omit<ResearchEvent, "time">): void => {
 // Waits until every event logged so far has been written (used by tests / export).
 export const flushEvents = (): Promise<unknown> => queue;
 
-export const getEventCount = async (): Promise<number> => {
-  await flushEvents();
-  return (await readEvents()).length;
-};
-
 export const clearEvents = async (): Promise<void> => {
   await flushEvents();
   try {

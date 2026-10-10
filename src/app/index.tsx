@@ -1,3 +1,4 @@
+import { checkIsOffline } from "@/utils/connectivity";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useRef } from "react";
@@ -9,9 +10,8 @@ export default function WelcomeScreen() {
   const hasNavigatedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // No internet check here: scanning (on-device OCR) and saved words work offline.
-  // Only a NEW dictionary lookup needs internet, and the dictionary screen
-  // handles that itself with a clear message.
+  // Scanning needs internet. Without it the person sees the offline screen,
+  // from where they can open their saved scans or try the connection again.
   const checkLanguageAndNavigate = async () => {
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
@@ -20,7 +20,11 @@ export default function WelcomeScreen() {
     try {
       const lang = await SecureStore.getItemAsync("selectedLanguage");
       if (lang) {
-        router.replace("/(tabs)" as any);
+        if (await checkIsOffline()) {
+          router.replace("/offline" as any);
+        } else {
+          router.replace("/(tabs)" as any);
+        }
       } else {
         router.replace("/language" as any);
       }

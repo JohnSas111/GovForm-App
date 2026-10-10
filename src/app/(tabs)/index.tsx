@@ -8,7 +8,9 @@ import LargeTextView, {
   ViewMode,
   ViewModeSwitch,
 } from "@/components/large-text-view";
+import OfflineBanner from "@/components/offline-banner";
 import { useLocalization } from "@/context/LocalizationContext";
+import { checkIsOffline, useIsOffline } from "@/utils/connectivity";
 import { recognizeForm } from "@/utils/form-recognition";
 import {
   getLargeTextSize,
@@ -59,130 +61,6 @@ export interface BoundingBoxItem {
   height: number;
 }
 
-// Sample fallback bounding boxes simulating Tesseract --psm 11 sparse text detection
-const DEMO_BOUNDING_BOXES: BoundingBoxItem[] = [
-  {
-    text: "SUPPLEMENTARY/UPDATING",
-    sentence: "SUPPLEMENTARY/UPDATING OF DATA",
-    x: 230,
-    y: 135,
-    width: 140,
-    height: 12,
-  },
-  {
-    text: "PERSONAL",
-    sentence: "1. PERSONAL INFORMATION",
-    x: 130,
-    y: 158,
-    width: 70,
-    height: 10,
-  },
-  {
-    text: "INFORMATION",
-    sentence: "1. PERSONAL INFORMATION",
-    x: 205,
-    y: 158,
-    width: 90,
-    height: 10,
-  },
-  {
-    text: "PWD",
-    sentence: "2. PWD TYPE OF DISABILITY",
-    x: 420,
-    y: 158,
-    width: 35,
-    height: 10,
-  },
-  {
-    text: "LAST NAME:",
-    sentence: "LAST NAME: DE LA CRUZ",
-    x: 108,
-    y: 172,
-    width: 55,
-    height: 8,
-  },
-  {
-    text: "FIRST NAME:",
-    sentence: "FIRST NAME: JUAN",
-    x: 108,
-    y: 186,
-    width: 55,
-    height: 8,
-  },
-  {
-    text: "MIDDLE NAME:",
-    sentence: "MIDDLE NAME: SANTOS",
-    x: 108,
-    y: 200,
-    width: 62,
-    height: 8,
-  },
-  {
-    text: "BARANGAY:",
-    sentence: "BARANGAY: SAN JOSE",
-    x: 108,
-    y: 228,
-    width: 50,
-    height: 8,
-  },
-  {
-    text: "CITY/MUNICIPALITY:",
-    sentence: "CITY/MUNICIPALITY: QUEZON CITY",
-    x: 108,
-    y: 242,
-    width: 85,
-    height: 8,
-  },
-  {
-    text: "INDIGENOUS",
-    sentence: "3. INDIGENOUS PEOPLE",
-    x: 130,
-    y: 275,
-    width: 75,
-    height: 10,
-  },
-  {
-    text: "PEOPLE",
-    sentence: "3. INDIGENOUS PEOPLE",
-    x: 210,
-    y: 275,
-    width: 50,
-    height: 10,
-  },
-  {
-    text: "Deaf/Hard of Hearing",
-    sentence: "Deaf/Hard of Hearing Disability",
-    x: 300,
-    y: 186,
-    width: 95,
-    height: 8,
-  },
-  {
-    text: "Psychosocial",
-    sentence: "Psychosocial Disability",
-    x: 430,
-    y: 186,
-    width: 65,
-    height: 8,
-  },
-  {
-    text: "Visual",
-    sentence: "Visual Impairment",
-    x: 430,
-    y: 214,
-    width: 35,
-    height: 8,
-  },
-  {
-    text: "Physical",
-    sentence: "Physical Disability",
-    x: 300,
-    y: 242,
-    width: 45,
-    height: 8,
-  },
-];
-
 export default function HomeScreen() {
   const { t } = useLocalization();
   const navigation = useNavigation();
@@ -203,6 +81,9 @@ export default function HomeScreen() {
   // Photo view (highlights on the picture) or Large text view (big words).
   const [viewMode, setViewMode] = useState<ViewMode>("photo");
   const [textSize, setTextSize] = useState<LargeTextSize>("medium");
+
+  // True while the phone has no internet: scanning is turned off.
+  const offline = useIsOffline();
 
   // A new scan opens in Large text only if the person turned that on in Settings.
   const applyLargeTextPreference = async () => {
@@ -424,11 +305,23 @@ export default function HomeScreen() {
     }
   };
 
+  // Scanning needs internet. Checked again here in case the connection
+  // dropped after the screen was drawn.
+  const blockIfOffline = async (): Promise<boolean> => {
+    if (await checkIsOffline()) {
+      Alert.alert(t("offline_title"), t("offline_scan_blocked"));
+      return true;
+    }
+    return false;
+  };
+
   const takePhoto = async () => {
+    if (await blockIfOffline()) return;
     router.push("/camera" as any);
   };
 
   const pickImage = async () => {
+    if (await blockIfOffline()) return;
     try {
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -629,6 +522,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       {/* Shows the guide once, the first time the app opens */}
       <HowToUseFirstLaunch />
+      <OfflineBanner />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{t("app_title")}</Text>
@@ -639,15 +533,33 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.actionButton} onPress={takePhoto}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              offline && styles.actionButtonDisabled,
+            ]}
+            onPress={takePhoto}
+            disabled={offline}
+          >
             <Ionicons name="camera" size={80} color="white" />
             <Text style={styles.actionButtonText}>{t("btn_take_photo")}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton} onPress={pickImage}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              offline && styles.actionButtonDisabled,
+            ]}
+            onPress={pickImage}
+            disabled={offline}
+          >
             <Ionicons name="cloud-upload" size={80} color="white" />
             <Text style={styles.actionButtonText}>{t("btn_choose_photo")}</Text>
           </TouchableOpacity>
+
+          {offline && (
+            <Text style={styles.offlineNote}>{t("offline_scan_blocked")}</Text>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -712,6 +624,16 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  actionButtonDisabled: {
+    opacity: 0.35,
+  },
+  offlineNote: {
+    color: "#7A4B00",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    fontWeight: "600",
   },
   loadingScreenContainer: {
     flex: 1,
@@ -783,36 +705,5 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 204, 0, 0.5)",
     borderColor: "#FFCC00",
     borderWidth: 2,
-  },
-  wordDetailCard: {
-    position: "absolute",
-    bottom: 30,
-    left: 24,
-    right: 24,
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
-    zIndex: 20,
-  },
-  wordHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  wordText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#000",
-  },
-  contextText: {
-    fontSize: 14,
-    color: "#555",
-    fontStyle: "italic",
   },
 });

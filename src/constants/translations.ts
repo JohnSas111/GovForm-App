@@ -96,7 +96,15 @@ export type TranslationKey =
   | "lt_hint"
   | "lt_empty"
   | "lt_setting_title"
-  | "lt_setting_desc";
+  | "lt_setting_desc"
+  | "offline_banner"
+  | "offline_title"
+  | "offline_message"
+  | "offline_go_history"
+  | "offline_try_again"
+  | "offline_checking"
+  | "offline_still"
+  | "offline_scan_blocked";
 
 export const translations: Record<
   LanguageKey,
@@ -222,6 +230,17 @@ export const translations: Record<
     lt_setting_title: "Open scans in Large text",
     lt_setting_desc:
       "Show the words in big letters first. You can switch back to the photo any time.",
+    offline_banner:
+      "Offline mode: scanning is turned off. You can still open your saved scans.",
+    offline_title: "You're offline",
+    offline_message:
+      "Scanning needs an internet connection. You can still open the scans you saved before.",
+    offline_go_history: "Go to history",
+    offline_try_again: "Try again",
+    offline_checking: "Checking...",
+    offline_still: "Still offline. Please turn on Wi-Fi or mobile data.",
+    offline_scan_blocked:
+      "Scanning is turned off while you are offline. Connect to the internet to scan a new form.",
   },
   Tagalog: {
     app_title: "GovForm AI",
@@ -345,6 +364,17 @@ export const translations: Record<
     lt_setting_title: "Buksan ang mga scan sa Malaking letra",
     lt_setting_desc:
       "Ipakita muna ang mga salita sa malalaking letra. Maaari kang bumalik sa larawan anumang oras.",
+    offline_banner:
+      "Offline mode: naka-off ang pag-scan. Maaari mo pa ring buksan ang mga na-save mong scan.",
+    offline_title: "Offline ka",
+    offline_message:
+      "Kailangan ng internet para mag-scan. Maaari mo pa ring buksan ang mga scan na na-save mo dati.",
+    offline_go_history: "Buksan ang mga nakaraang scan",
+    offline_try_again: "Subukan muli",
+    offline_checking: "Sinusuri...",
+    offline_still: "Offline pa rin. Paki-on ang Wi-Fi o mobile data.",
+    offline_scan_blocked:
+      "Naka-off ang pag-scan habang offline. Kumonekta sa internet para mag-scan ng bagong form.",
   },
   Cebuano: {
     app_title: "GovForm AI",
@@ -468,5 +498,16 @@ export const translations: Record<
     lt_setting_title: "Ablihi ang mga scan sa Dako nga letra",
     lt_setting_desc:
       "Ipakita una ang mga pulong sa dagko nga letra. Makabalik ka sa litrato bisan kanus-a.",
+    offline_banner:
+      "Offline mode: gi-off ang pag-scan. Makaabli ka gihapon sa imong na-save nga mga scan.",
+    offline_title: "Offline ka",
+    offline_message:
+      "Kinahanglan ang internet aron mag-scan. Makaabli ka gihapon sa mga scan nga imong na-save kaniadto.",
+    offline_go_history: "Abli ang mga niaging scan",
+    offline_try_again: "Sulayi pag-usab",
+    offline_checking: "Gisusi...",
+    offline_still: "Offline pa gihapon. Palihug i-on ang Wi-Fi o mobile data.",
+    offline_scan_blocked:
+      "Gi-off ang pag-scan samtang offline. Konekta sa internet aron mag-scan og bag-ong form.",
   },
 };

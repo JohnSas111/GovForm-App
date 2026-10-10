@@ -58,8 +58,6 @@ const getIndex = (): IndexedTerm<DictionaryEntry>[] => {
   return cachedIndex;
 };
 
-export const DICTIONARY_SIZE = (): number => getIndex().length;
-
 // Looks up the tapped word in the dictionary. Returns a result in the same shape
 // as an AI answer (so the screen can show it the same way), or null when the term
 // is not in the dictionary. The dictionary is Bisaya only: other languages get null.

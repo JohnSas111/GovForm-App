@@ -1,4 +1,5 @@
 import { HowToUseButton } from "@/components/how-to-use-sheet";
+import OfflineBanner from "@/components/offline-banner";
 import { LanguageKey } from "@/constants/translations";
 import { useLocalization } from "@/context/LocalizationContext";
 import {
@@ -130,6 +131,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OfflineBanner />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>{t("nav_settings")}</Text>
 

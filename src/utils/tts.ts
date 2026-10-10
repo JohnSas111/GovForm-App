@@ -296,11 +296,3 @@ export function stopSpeaking(): void {
   currentUtteranceId += 1;
   stopForLifecycle();
 }
-
-export async function isSpeakingNow(): Promise<boolean> {
-  try {
-    return await Speech.isSpeakingAsync();
-  } catch {
-    return false;
-  }
-}
